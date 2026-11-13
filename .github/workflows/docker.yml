@@ -39,7 +39,6 @@ jobs:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
-            type=raw,value=build-{{date 'YYYYMMDD'}}
 
       - name: Build & push (amd64 + arm64)
         uses: docker/build-push-action@v6
@@ -58,3 +57,49 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # 真正把镜像跑起来，确认软路由上拉下来就能用
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run image
+        run: |
+          docker run -d --name wb -p 8787:8787 \
+            -e TZ=Asia/Shanghai \
+            -e WB_PASSWORD=smoke-test-pass \
+            "$IMAGE:latest"
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8787/api/me > /dev/null; then
+              echo "服务在 ${i}0 秒内就绪"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Assert behaviour
+        run: |
+          set -e
+          curl -fsS http://127.0.0.1:8787/api/me | tee me.json
+          grep -q '"needLogin": *true' me.json
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/api/overview)
+          echo "未登录访问 /api/overview -> $code"
+          test "$code" = "401"
+
+          curl -fsS http://127.0.0.1:8787/ | grep -qi "<title"
+
+          docker exec wb python -c "import cryptography; print('cryptography', cryptography.__version__)"
+          echo -n "容器时间: "; docker exec wb date '+%Y-%m-%d %H:%M:%S %Z'
+          echo -n "数据目录: "; docker exec wb ls -A /data | tr '\n' ' '; echo
+
+      - name: Container logs
+        if: always()
+        run: docker logs wb | tail -30
