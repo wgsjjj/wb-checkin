@@ -18,6 +18,9 @@ packaging/_icon_preview.png
 
 # 本地临时文件
 *.log
+_*.py
+_*.txt
+_*.png
 _c.js
 _c2.js
 _check.js

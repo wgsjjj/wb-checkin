@@ -140,7 +140,7 @@
   .badge.err{background:var(--err-bg);color:var(--err)}
   .badge.warn{background:var(--warn-bg);color:var(--warn)}
 
-  .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:13px 0 11px}
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:13px 0 11px}
   .metric{background:#FAFBFE;border-radius:9px;padding:7px 9px}
   .metric b{display:block;font-size:15px;font-weight:640;letter-spacing:-.3px}
   .metric small{font-size:10.5px;color:var(--ink-3)}
@@ -278,6 +278,33 @@
   .qrhint b{color:var(--brand);font-weight:600}
   .qrhint .left{display:block;margin-top:6px;font-size:11px;font-variant-numeric:tabular-nums}
 
+  /* 官方登录 */
+  .offintro p{margin:0 0 8px;font-size:12.5px;line-height:1.75;color:var(--ink-2)}
+  .offintro p b{color:var(--ink-1);font-weight:600}
+  .offbadge{
+    display:inline-block;font-size:10.5px;font-weight:600;letter-spacing:.4px;
+    color:var(--brand);background:#EDEEFE;border-radius:5px;padding:2px 7px;margin-bottom:10px;
+  }
+  .offdim{color:var(--ink-3)!important;font-size:11.5px!important}
+  .offbtn{width:100%;margin-top:6px;height:38px}
+  .offbtn2{
+    width:100%;margin-top:8px;height:34px;font-size:12px;
+    background:transparent;border:1px solid var(--line,#E6E7F0);color:var(--ink-2);
+  }
+  .offbtn2:hover{background:#F5F6FA;color:var(--ink-1)}
+  .offalt{font-size:11.5px;color:var(--ink-3);text-align:center;margin-top:10px}
+  .offalt a{color:var(--brand);text-decoration:none}
+  .offalt a:hover{text-decoration:underline}
+  .offend{color:#D64545;font-size:11.5px;margin-top:10px;line-height:1.6;min-height:0}
+  .offqr{
+    display:flex;align-items:center;justify-content:center;
+    background:#fff;border:1px solid var(--line,#E6E7F0);border-radius:10px;padding:8px;
+    min-height:196px;
+  }
+  .offqr img{width:190px;height:190px;display:block;object-fit:contain}
+  .offstatus{font-size:12px;color:var(--ink-2);margin-top:12px;line-height:1.6;text-align:center;min-height:19px}
+  .offactions{display:flex;justify-content:center;margin-top:12px}
+
   /* ---------- Toast ---------- */
   #toasts{position:fixed;top:16px;right:16px;z-index:80;display:flex;flex-direction:column;gap:8px}
   .toast{
@@ -356,7 +383,7 @@
   <section class="stats">
     <div class="stat"><b id="sTotal">0</b><small>账号总数</small><div class="sub" id="sEnabled">0 个启用</div></div>
     <div class="stat"><b id="sDone">0</b><small>今日已签到</small><div class="sub" id="sRate">完成率 —</div></div>
-    <div class="stat"><b id="sCredit">0</b><small>积分合计</small><div class="sub">所有账号余额之和</div></div>
+    <div class="stat"><b id="sCredit">0</b><small>积分余额合计</small><div class="sub">各账号当前可用积分之和</div></div>
     <div class="stat"><b id="sStreak">0</b><small>最长连续</small><div class="sub" id="sInvalid">无异常账号</div></div>
   </section>
 
@@ -413,7 +440,8 @@
     <header>
       <h3 id="modalTitle">添加账号</h3>
       <div class="tabs" id="tabs">
-        <button class="tab active" data-tab="form" onclick="switchTab('form')">手动填写</button>
+        <button class="tab active" data-tab="official" onclick="switchTab('official')">官方登录</button>
+        <button class="tab" data-tab="form" onclick="switchTab('form')">手动填写</button>
         <button class="tab" data-tab="qr" onclick="switchTab('qr')">手机扫码</button>
       </div>
     </header>
@@ -455,6 +483,30 @@
           二维码 10 分钟内有效，且只能提交一次。手机需要和这台设备在同一个局域网内；软路由部署时用软路由的局域网 IP 访问控制台，二维码会自动用这个地址。
         </div>
       </div>
+
+      <div id="paneOfficial" style="display:none">
+        <div id="offIdle">
+          <div class="offintro">
+            <div class="offbadge">官方登录</div>
+            <p>点下面按钮，后台静默打开官方登录页，<b>二维码直接显示在这里</b>，用手机微信扫一下就行，不会弹任何窗口。</p>
+            <p class="offdim">扫码成功后账号自动加入列表，整个过程不需要你复制粘贴任何东西。</p>
+          </div>
+          <button class="btn btn-primary offbtn" id="offStartBtn" onclick="startOfficial(true)">微信扫码登录</button>
+          <button class="btn offbtn2" onclick="startOfficial(false)">改用手机号 / 企业微信（会打开窗口）</button>
+          <div class="offend" id="offErr"></div>
+        </div>
+
+        <div id="offRun" style="display:none">
+          <div class="offqr" id="offQrBox"><img id="offQr" alt="微信登录二维码" /></div>
+          <div class="offstatus" id="offStatus">正在准备…</div>
+          <div class="offalt" id="offAlt" style="display:none">
+            扫不了？<a href="javascript:void(0)" onclick="switchToWindow()">改用手机号登录</a>
+          </div>
+          <div class="note" style="margin-top:12px">
+            二维码有效期约 2 分钟，过期会自动换新的。同一个二维码只能登录一次。
+          </div>
+        </div>
+      </div>
     </div>
     <div class="foot">
       <button class="btn" onclick="closeModal()">取消</button>
@@ -476,6 +528,12 @@ const STATE_LABEL = {
   invalid: ['令牌失效', 'err'],
   error: ['失败', 'err']
 };
+
+function fmtNum(v) {
+  const n = Number(v || 0);
+  if (!isFinite(n)) return '0';
+  return Number.isInteger(n) ? n.toLocaleString('zh-CN') : n.toFixed(2);
+}
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
@@ -581,7 +639,7 @@ function render() {
   $('sEnabled').textContent = s.enabled + ' 个启用';
   $('sDone').textContent = s.done;
   $('sRate').textContent = s.total ? Math.round(s.done / s.total * 100) + '% 完成率' : '完成率 —';
-  $('sCredit').textContent = s.credit.toLocaleString('zh-CN');
+  $('sCredit').textContent = fmtNum(s.credit);
   $('sStreak').textContent = s.streak;
   $('sInvalid').textContent = s.invalid ? (s.invalid + ' 个令牌失效') : '无异常账号';
   $('accCount').textContent = s.total;
@@ -618,7 +676,8 @@ function render() {
         <div class="metrics">
           <div class="metric"><b>${a.today ? '已签' : '未签'}</b><small>今日</small></div>
           <div class="metric"><b>${a.streak}<span style="font-size:11px;font-weight:400;color:var(--ink-3)"> 天</span></b><small>连续</small></div>
-          <div class="metric"><b>${Number(a.credit).toLocaleString('zh-CN')}</b><small>积分</small></div>
+          <div class="metric"><b>${fmtNum(a.credit)}</b><small>余额</small></div>
+          <div class="metric"><b>${fmtNum(a.earned)}</b><small>签到累计</small></div>
         </div>
         <div class="msgline">${badgeFor(a)} <span style="margin-left:4px">${esc(msg)}</span></div>
         <div class="actions">
@@ -764,9 +823,126 @@ function switchTab(tab) {
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   $('paneForm').style.display = tab === 'form' ? '' : 'none';
   $('paneQr').style.display = tab === 'qr' ? '' : 'none';
+  $('paneOfficial').style.display = tab === 'official' ? '' : 'none';
   const sb = $('saveBtn');
   if (sb) sb.style.display = tab === 'form' ? '' : 'none';
   if (tab === 'qr') startQr(); else stopQr();
+  if (tab !== 'official') cancelOfficial(true);
+  if (tab === 'official') resetOfficial();
+}
+
+// ---------- 官方登录 ----------
+
+let OFF = { sid: null, timer: null, qrTimer: null, busy: false };
+
+function resetOfficial() {
+  $('offIdle').style.display = '';
+  $('offRun').style.display = 'none';
+  $('offStartBtn').disabled = false;
+  $('offErr').textContent = '';
+}
+
+async function startOfficial(headless) {
+  if (OFF.busy) return;
+  const useHeadless = headless !== false;
+  OFF.busy = true;
+  $('offErr').textContent = '';
+  $('offStartBtn').disabled = true;
+  try {
+    const avail = await api('/api/browser/available');
+    if (!avail.available) {
+      throw new Error('这台机器上没找到 Chrome 或 Edge。装一个浏览器就能用；或者改用「手动填写」粘贴令牌。');
+    }
+    const r = await api('/api/browser/start', {
+      method: 'POST',
+      body: JSON.stringify({ hint: $('fName').value.trim(), headless: useHeadless })
+    });
+    if (!r.ok) throw new Error(r.error || '启动失败');
+    OFF.sid = r.sid;
+    OFF.hasQr = false;
+    OFF.headless = !!r.headless;
+    $('offIdle').style.display = 'none';
+    $('offRun').style.display = '';
+    $('offQrBox').style.display = '';
+    $('offAlt').style.display = OFF.headless ? '' : 'none';
+    $('offQr').removeAttribute('src');
+    $('offStatus').textContent = '正在准备登录页…';
+    pollOfficial();
+  } catch (e) {
+    OFF.busy = false;
+    $('offStartBtn').disabled = false;
+    $('offErr').textContent = e.message || String(e);
+  }
+}
+
+function pollOfficial() {
+  clearTimeout(OFF.timer);
+  clearInterval(OFF.qrTimer);
+  const sid = OFF.sid;
+  let lastQr = 0;
+
+  OFF.qrTimer = setInterval(() => {
+    if (!OFF.sid || !OFF.hasQr) return;
+    const img = $('offQr');
+    img.src = '/api/browser/qr?sid=' + encodeURIComponent(OFF.sid) + '&t=' + Date.now();
+    img.style.display = '';
+  }, 2600);
+
+  const tick = async () => {
+    if (!OFF.sid || OFF.sid !== sid) return;
+    let st;
+    try { st = await api('/api/browser/status?sid=' + encodeURIComponent(sid)); }
+    catch (e) { OFF.timer = setTimeout(tick, 2000); return; }
+
+    $('offStatus').textContent = st.message || '等待登录…';
+    OFF.hasQr = !!st.has_qr;
+    if (st.has_qr) {
+      if (!$('offQr').getAttribute('src')) {
+        $('offQr').src = '/api/browser/qr?sid=' + encodeURIComponent(sid) + '&t=' + Date.now();
+      }
+      $('offQrBox').style.display = '';
+    } else {
+      $('offQrBox').style.display = 'none';
+    }
+
+    if (st.state === 'ok') {
+      clearInterval(OFF.qrTimer);
+      const name = (st.account && st.account.name) || '账号';
+      toast('已添加 ' + name, 'ok');
+      if (st.account && st.account.warn) setTimeout(() => toast(st.account.warn, 'ok'), 600);
+      OFF.sid = null; OFF.busy = false;
+      $('modal').classList.remove('show');
+      refresh();
+      return;
+    }
+    if (st.state === 'error' || st.state === 'cancelled' || st.state === 'expired') {
+      clearInterval(OFF.qrTimer);
+      OFF.sid = null; OFF.busy = false;
+      resetOfficial();
+      $('offErr').textContent = st.message || '登录未完成';
+      return;
+    }
+    OFF.timer = setTimeout(tick, 1500);
+  };
+  tick();
+}
+
+async function switchToWindow() {
+  await cancelOfficial(true);
+  resetOfficial();
+  startOfficial(false);
+}
+
+async function cancelOfficial(silent) {
+  clearTimeout(OFF.timer);
+  clearInterval(OFF.qrTimer);
+  const sid = OFF.sid;
+  OFF.sid = null;
+  OFF.busy = false;
+  if (sid) {
+    try { await api('/api/browser/cancel', { method: 'POST', body: JSON.stringify({ sid }) }); } catch (e) {}
+  }
+  if (!silent) resetOfficial();
 }
 
 async function startQr() {
@@ -864,7 +1040,8 @@ function openAdd() {
   $('tokenNote').style.display = '';
   $('tabs').style.display = '';
   $('modal').classList.add('show');
-  switchTab('form');
+  resetOfficial();
+  switchTab('official');
   setTimeout(() => $('fName').focus(), 50);
 }
 
@@ -886,6 +1063,7 @@ function openEdit(id) {
 
 function closeModal() {
   stopQr();
+  cancelOfficial(true);
   $('modal').classList.remove('show');
 }
 

@@ -57,7 +57,7 @@ NO_BROWSER = os.environ.get("WB_NO_BROWSER") == "1"
 DEFAULT_DOMAIN = os.environ.get("WB_DOMAIN", "www.workbuddy.cn")
 DEFAULT_TIMES = "08:30,12:00,15:00,18:00,21:30"
 
-API_VERSION = "1.0.0"
+API_VERSION = "1.2.0"
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) WorkBuddy/5.9.3 Chrome/136.0.0.0 Electron/36.0.0 Safari/537.36"
@@ -175,7 +175,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     last_status_date TEXT DEFAULT '',
     last_checked_in INTEGER DEFAULT 0,
     last_streak INTEGER DEFAULT 0,
-    last_credit INTEGER DEFAULT 0,
+    last_credit REAL DEFAULT 0,          -- 账户真实积分余额（如 69.23）
+    last_earned REAL DEFAULT 0,          -- 本次签到活动累计获得
     last_msg TEXT DEFAULT '',
     last_ts TEXT DEFAULT '',
     token_state TEXT DEFAULT ''
@@ -217,6 +218,10 @@ def db():
 def init_db():
     with db() as conn:
         conn.executescript(SCHEMA)
+        # 老库补列（SQLite 没有 IF NOT EXISTS 的 ADD COLUMN，只能查一下）
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(accounts)")}
+        if "last_earned" not in cols:
+            conn.execute("ALTER TABLE accounts ADD COLUMN last_earned REAL DEFAULT 0")
         for k, v in (("auto", "1"), ("times", DEFAULT_TIMES), ("last_auto", "")):
             conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES(?, ?)", (k, v))
 
@@ -266,6 +271,7 @@ def update_account_status(acc_id, **fields):
         "last_checked_in",
         "last_streak",
         "last_credit",
+        "last_earned",
         "last_msg",
         "last_ts",
         "token_state",
@@ -350,13 +356,27 @@ def wb_request(account, path, body=None, timeout=25):
     req = urllib.request.Request(url, data=data, method="POST")
     req.add_header("Content-Type", "application/json")
     req.add_header("Accept", "application/json, text/plain, */*")
-    req.add_header("Authorization", "Bearer " + token)
-    req.add_header("User-Agent", UA)
     req.add_header("Origin", "https://" + domain)
     req.add_header("Referer", "https://" + domain + "/")
-    uid = (account["user_id"] or "").strip()
-    if uid:
-        req.add_header("X-User-Id", uid)
+
+    # 网页版登录态是 Cookie（httpOnly），不是 Bearer；UA 必须和浏览器一致，
+    # 网关会拿 UA 校验会话，换成别的 UA 直接 401
+    if token.startswith("CK1:"):
+        try:
+            cred = json.loads(token[4:])
+        except Exception:
+            cred = {}
+        req.add_header("Cookie", cred.get("cookie") or "")
+        req.add_header("User-Agent", cred.get("ua") or UA)
+        if cred.get("referer"):
+            req.add_header("Referer", cred["referer"])
+    else:
+        req.add_header("Authorization", "Bearer " + token)
+        req.add_header("User-Agent", UA)
+        uid = (account["user_id"] or "").strip()
+        if uid:
+            req.add_header("X-User-Id", uid)
+
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status, resp.read().decode("utf-8", "replace")
@@ -369,6 +389,27 @@ def wb_request(account, path, body=None, timeout=25):
         return 0, json.dumps({"error": str(e)}, ensure_ascii=False)
 
 
+# 真实积分余额在这个接口上（注意：它没有 /v2 前缀）
+BALANCE_PATH = "/billing/meter/get-user-resource-summary"
+
+
+def fetch_balance(account):
+    """账户真实余额。签到接口里的 total_credits 是「本次活动累计获得」，不是余额。"""
+    code, raw = wb_request(account, BALANCE_PATH, {})
+    if code != 200:
+        return None
+    payload = safe_json(raw)
+    if not isinstance(payload, dict) or payload.get("code") != 0:
+        return None
+    d = payload.get("data") or {}
+    if not isinstance(d, dict):
+        return None
+    try:
+        return round(float(d.get("TotalCredits")), 2)
+    except (TypeError, ValueError):
+        return None
+
+
 def fetch_status(account):
     code, raw = wb_request(account, BASE_PATH + "/checkin-activity-status", {})
     payload = safe_json(raw)
@@ -376,12 +417,17 @@ def fetch_status(account):
         d = payload.get("data") or {}
         if not isinstance(d, dict):
             d = {}
+        try:
+            earned = round(float(d.get("total_credits")), 2)
+        except (TypeError, ValueError):
+            earned = None
         return {
             "ok": True,
             "state": "status",
             "today": bool(d.get("today_checked_in")),
             "streak": int(d.get("streak_days") or 0),
-            "balance": pick_balance(d),
+            "balance": fetch_balance(account),      # 真实余额
+            "earned": earned,                        # 活动累计获得
             "daily": d.get("daily_credit"),
             "message": "",
             "raw": raw[:600],
@@ -465,6 +511,7 @@ def checkin_one(acc_id, trigger="manual"):
             last_checked_in=1,
             last_streak=st["streak"],
             last_credit=st["balance"] if st["balance"] is not None else row["last_credit"],
+            last_earned=st.get("earned") if st.get("earned") is not None else row["last_earned"],
             last_msg="今天已签到",
             last_ts=ts,
             token_state="ok",
@@ -491,6 +538,7 @@ def checkin_one(acc_id, trigger="manual"):
             last_checked_in=1,
             last_streak=streak or 0,
             last_credit=balance if balance is not None else (row["last_credit"] or 0),
+            last_earned=st2.get("earned") if st2.get("earned") is not None else (row["last_earned"] or 0),
             last_msg=res["message"],
             last_ts=ts,
             token_state="ok",
@@ -613,6 +661,8 @@ def scheduler():
 def mask_token(token):
     if not token:
         return ""
+    if token.startswith("CK1:"):
+        return "网页 Cookie 登录态"
     if len(token) <= 12:
         return token[:2] + "****"
     return token[:6] + "…" + token[-4:]
@@ -631,6 +681,7 @@ def account_public(row):
         "today": bool(row["last_checked_in"]) if fresh else False,
         "streak": row["last_streak"] or 0,
         "credit": row["last_credit"] or 0,
+        "earned": row["last_earned"] or 0,
         "last_msg": row["last_msg"] or "",
         "last_ts": row["last_ts"] or "",
         "token_state": row["token_state"] or "",
@@ -754,6 +805,7 @@ def create_account(payload):
             last_checked_in=1 if st["today"] else 0,
             last_streak=st["streak"],
             last_credit=st["balance"] if st["balance"] is not None else 0,
+            last_earned=st.get("earned") if st.get("earned") is not None else 0,
             last_msg="今天已签到" if st["today"] else "待签到",
             last_ts=now,
             token_state="ok",
@@ -766,6 +818,74 @@ def create_account(payload):
         update_account_status(acc_id, token_state="invalid", last_msg=warn, last_ts=now)
 
     return {"ok": True, "id": acc_id, "name": name, "warn": warn, "status": st}
+
+
+# ---------------------------------------------------------------- 官方登录
+
+try:
+    from browser_login import BrowserLogin
+
+    BROWSER_AVAILABLE = True
+except Exception:                                    # 模块缺失时静默降级
+    BrowserLogin = None
+    BROWSER_AVAILABLE = False
+
+
+def _official_login_token(token, uid, hint, brand):
+    """浏览器登录读到的令牌 → 建账号；令牌不通就把这条脏数据撤掉。"""
+    res = create_account({
+        "token": token,
+        "user_id": uid,
+        "name": hint or "",
+        "note": "官方登录·%s" % (brand or "浏览器"),
+    })
+    if not res.get("ok"):
+        return {"ok": False, "error": res.get("error") or "添加失败"}
+    if "令牌" in (res.get("warn") or ""):
+        with db() as conn:
+            conn.execute("DELETE FROM accounts WHERE id=?", (res["id"],))
+        st = res.get("status") or {}
+        detail = (st.get("message") or res.get("warn") or "").strip()
+        add_log({"id": 0, "name": "-"}, "官方登录", "invalid", False, message=detail[:200])
+        return {"ok": False, "error": detail[:120] or "令牌校验没通过"}
+    add_log(
+        {"id": res["id"], "name": res.get("name") or "-"},
+        "官方登录", "ok", True,
+        message="通过%s登录自动添加" % (brand or "浏览器"),
+    )
+    return {"ok": True, "id": res["id"], "name": res.get("name"), "warn": res.get("warn", "")}
+
+
+class _NoBrowser:
+    def available(self):
+        return False
+
+    def start(self, hint="", headless=True):
+        return {"ok": False, "error": "官方登录模块不可用"}
+
+    def status(self, sid):
+        return {"ok": False, "state": "expired", "message": "不可用"}
+
+    def qr(self, sid):
+        return None
+
+    def cancel(self, sid):
+        return {"ok": True}
+
+    def cleanup(self):
+        pass
+
+
+BROWSER = BrowserLogin(DATA_DIR, _official_login_token, log) if BROWSER_AVAILABLE else _NoBrowser()
+
+
+def browser_cleanup_loop():
+    while True:
+        time.sleep(20)
+        try:
+            BROWSER.cleanup()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------- 扫码添加
@@ -957,6 +1077,23 @@ class Handler(BaseHTTPRequestHandler):
             ticket = (self._query().get("t") or [""])[0]
             return self._json(qr_status(ticket))
 
+        if path == "/api/browser/available":
+            return self._json({"ok": True, "available": BROWSER_AVAILABLE})
+
+        if path == "/api/browser/status":
+            sid = (self._query().get("sid") or [""])[0]
+            return self._json(BROWSER.status(sid))
+
+        if path == "/api/browser/qr":
+            sid = (self._query().get("sid") or [""])[0]
+            png = BROWSER.qr(sid)
+            if not png:
+                return self._send(404, b"no qr", "text/plain; charset=utf-8")
+            return self._send(
+                200, png, "image/png",
+                extra=[("Cache-Control", "no-store, max-age=0")],
+            )
+
         if path == "/api/logs":
             limit = 100
             try:
@@ -1024,6 +1161,15 @@ class Handler(BaseHTTPRequestHandler):
             res = create_account(body)
             return self._json(res, 200 if res.get("ok") else 400)
 
+        # ---- 官方登录（开浏览器扫码 / 手机号）
+        if path == "/api/browser/start":
+            headless = body.get("headless")
+            headless = True if headless is None else bool(headless)
+            return self._json(BROWSER.start(str(body.get("hint") or ""), headless=headless))
+
+        if path == "/api/browser/cancel":
+            return self._json(BROWSER.cancel(str(body.get("sid") or "")))
+
         if path == "/api/checkin":
             ids = body.get("ids") or None
             res = run_batch(ids=ids, trigger="manual")
@@ -1067,6 +1213,7 @@ class Handler(BaseHTTPRequestHandler):
                         last_checked_in=1 if st["today"] else 0,
                         last_streak=st["streak"],
                         last_credit=st["balance"] if st["balance"] is not None else row["last_credit"],
+            last_earned=st.get("earned") if st.get("earned") is not None else row["last_earned"],
                         last_msg="今天已签到" if st["today"] else "待签到",
                         last_ts=now,
                         token_state="ok",
@@ -1152,6 +1299,7 @@ def main():
 
     t = threading.Thread(target=scheduler, daemon=True)
     t.start()
+    threading.Thread(target=browser_cleanup_loop, daemon=True).start()
 
     global PORT
     server = None
