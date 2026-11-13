@@ -19,6 +19,15 @@
 
 ## 更新记录
 
+**1.3.0** · 2026-11-13
+- **Docker 镜像内置 chromium，容器里也能扫码登录**：之前容器没有浏览器，「官方登录」直接报「本机没找到 Chrome 或 Edge」；现在镜像默认装好 chromium，二维码照常显示在控制台弹窗里
+- 容器内自动补 `--no-sandbox` / `--disable-dev-shm-usage`（容器默认 root、`/dev/shm` 只有 64MB，不加这两个参数 chromium 起不来或一加载就崩）
+- 新增 `WB_CHROME_PATH` 指定浏览器、`WB_CHROME_ARGS` 追加启动参数
+- 浏览器启动失败时把 chromium 自己的报错带回前端，不再只说「启动失败」
+- 容器里点「手机号 / 企业微信」登录会直接提示不支持（没有图形界面），不再静默卡住
+- 内存限制从 256m 提到 1g，并加 `shm_size: 256m`；存储紧张可用 `WB_WITH_BROWSER=0` 构建不带浏览器的镜像
+- 镜像体积增加约 400~500MB
+
 **1.2.0** · 2026-11-13
 - **官方登录改成无头模式**：后台跑，二维码直接显示在控制台弹窗里，不再弹出浏览器窗口
 - **支持网页版 Cookie 凭据**：网页登录根本不用 Bearer 令牌，之前抓不到凭据就是因为找错了地方；Cookie 还要带上浏览器原样 UA
@@ -67,7 +76,11 @@ exe 版的数据存在它旁边的 `data/` 目录，整个文件夹拷走就能�
 
 读到的凭据是网页版的 **httpOnly Cookie + 浏览器 UA**（网页版不用 Bearer 令牌，两个都要，网关会校验 UA），加密后存本地。
 
-> 需要后端所在机器装有 Chrome 或 Edge（Windows 自带 Edge）。容器里没有浏览器，Docker 部署请用方式二或三。
+> 需要后端所在机器有可用浏览器：桌面端用系统里的 Chrome / Edge（Windows 自带 Edge）；
+> **Docker 部署用镜像内置的 chromium**（1.3.0 起默认装好，源码自建也一样），
+> 容器里扫码登录已经可用。想用指定的浏览器就设 `WB_CHROME_PATH`。
+> 如果软路由内存 / 存储实在紧张，可以 `--build-arg WB_WITH_BROWSER=0` 构建不带浏览器的镜像，
+> 此时只能用方式二或方式三添加账号。
 
 ### 方式二：从浏览器复制令牌
 
@@ -163,7 +176,11 @@ services:
       WB_DOMAIN: "www.workbuddy.cn"
     volumes:
       - wb-data:/data
-    mem_limit: 256m
+    # 内置 chromium 之后扫码要几百 MB 内存，256m 会被 OOM 干掉；
+    # 不用浏览器（只粘贴凭据）时可以调回 256m
+    mem_limit: 1g
+    # chromium 依赖 /dev/shm，容器默认只有 64MB
+    shm_size: 256m
     logging:
       driver: json-file
       options:
@@ -229,7 +246,9 @@ docker compose pull && docker compose up -d     # 或在 DPanel 里点「重新�
 | `WB_SECRET` | 空 | 令牌加密主密钥。留空则自动生成 `data/.secret`；数据目录迁移时带上它 |
 | `WB_DATA_DIR` | `./data` | 数据库与密钥目录，容器内为 `/data` |
 | `WB_DOMAIN` | `www.workbuddy.cn` | 默认接口域名，添加账号时可单独指定 |
-| `WB_NO_BROWSER` | 未设置 | `1` 表示启动不自动开浏览器（容器里默认开启该行为） |
+| `WB_NO_BROWSER` | 未设置 | `1` 表示启动不自动开浏览器（容器里默认开启该行为）；与「官方登录」无关 |
+| `WB_CHROME_PATH` | 自动探测 | 指定浏览器，完整路径或命令名都行。容器里默认用镜像内置的 `/usr/bin/chromium` |
+| `WB_CHROME_ARGS` | 空 | 额外启动参数，空格分隔。例如挂代理 `--proxy-server=http://192.168.1.2:7890`；容器内的 `--no-sandbox` 会自动补 |
 
 ---
 
@@ -267,7 +286,7 @@ docker compose pull && docker compose up -d     # 或在 DPanel 里点「重新�
 | --- | --- |
 | 控制台页面 | 任何现代浏览器：Chrome / Edge / Firefox / Safari / 手机浏览器都行，无框架无构建 |
 | 后端 | Python 3.9+，Windows / macOS / Linux；Windows 另有免安装 exe |
-| 官方扫码登录 | **需要后端所在机器装有 Chrome 或 Edge**（Windows 自带 Edge）。容器里没有浏览器，Docker 部署不能用这条路径 |
+| 官方扫码登录 | **需要后端所在机器有可用浏览器**：桌面端用系统的 Chrome / Edge，容器里用镜像内置的 chromium（1.3.0 起默认装好）。手机号 / 企业微信登录需要有图形界面，容器里只能用扫码 |
 
 控制台可以换任何电脑、任何浏览器打开（`http://后端IP:8787`），但「扫码自动抓凭据」这件事
 必须在跑后端的那台机器上完成——是它去启动浏览器的。
@@ -327,7 +346,7 @@ A：当前版本的客户端把令牌加密了，解密密钥不落在可读文�
 A：看的是哪个数。「余额」来自 `/billing/meter/get-user-resource-summary`，是当前可用积分；「签到累计」来自签到活动接口，只是本次活动的累计发放量（连续天数 × 每日积分），不扣消耗。两个数对不上是正常的。
 
 **Q：点「微信扫码登录」没反应 / 提示找不到浏览器？**
-A：官方登录要后端所在机器有 Chrome 或 Edge。Windows 自带 Edge；Linux 桌面装 `chromium` 或 `google-chrome`；Docker 容器里没有浏览器，只能用粘贴令牌的方式。
+A：官方登录需要后端所在机器有可用浏览器。桌面端：Windows 自带 Edge，Linux 桌面装 `chromium` 或 `google-chrome`；容器里从 1.3.0 起镜像内置了 chromium，**扫码登录可以直接用**。如果容器还是提示找不到浏览器，说明用的是旧镜像或构建时关了浏览器，`docker exec wb-checkin chromium --version` 确认一下；报错信息现在会带上浏览器自己的输出，能直接看出缺什么库。
 
 **Q：扫码成功了但控制台一直显示等待？**
 A：先看状态那行字。正常流程是「正在加载二维码…」→「请用微信扫描二维码」→ 扫码后 2 秒内变「登录成功」。如果卡在「登录中，等待页面跳转…」，说明页面离开登录页了但没检测到登录标记，把这句话告诉我。

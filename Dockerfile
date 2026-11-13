@@ -9,14 +9,26 @@ ENV PYTHONUNBUFFERED=1 \
     WB_DATA_DIR=/data \
     WB_NO_BROWSER=1
 
+# 1 = 镜像内置 chromium，容器里也能跑「官方登录」扫码（镜像大约多 400~500MB）
+# 0 = 不装浏览器，只能粘贴凭据添加账号（镜像小，适合存储紧张的软路由）
+ARG WB_WITH_BROWSER=1
+
 WORKDIR /app
 
-# tzdata 必须装，否则容器内是 UTC，定时签到会整体偏移 8 小时
-RUN apt-get update \
- && apt-get install -y --no-install-recommends tzdata \
- && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
- && echo $TZ > /etc/timezone \
- && rm -rf /var/lib/apt/lists/*
+# tzdata 必须装，否则容器内是 UTC，定时签到会整体偏移 8 小时。
+# chromium 装完立刻跑一次 --version：能启动才算构建成功，避免运行时才发现缺库。
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends tzdata; \
+    if [ "$WB_WITH_BROWSER" = "1" ]; then \
+        apt-get install -y --no-install-recommends chromium fonts-wqy-zenhei; \
+        ln -sf /usr/bin/chromium /usr/local/bin/chromium; \
+        chromium --version; \
+        rm -rf /root/.cache; \
+    fi; \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime; \
+    echo $TZ > /etc/timezone; \
+    rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt

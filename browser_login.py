@@ -5,7 +5,12 @@
 让用户在窗口里正常扫码/收验证码，登录成功后在同一页面上下文里把令牌读出来。
 
 不逆向任何密钥，也不伪造设备身份——只是替用户把「登录」这一步自动化了。
-仅桌面端可用；容器里没有浏览器。
+
+浏览器从哪来：
+  · 桌面端直接用系统里的 Chrome / Edge；
+  · 容器里用镜像内置的 chromium（Debian 包，/usr/bin/chromium）——见 Dockerfile；
+  · 想指定某一只，把 WB_CHROME_PATH 设成完整路径或命令名即可。
+启动参数可以用 WB_CHROME_ARGS 追加，容器内会自动补 --no-sandbox / --disable-dev-shm-usage。
 """
 
 import base64
@@ -89,7 +94,34 @@ NICK_JS = r"""
 """
 
 
+def _brand_of(path):
+    p = (path or "").lower()
+    if "edge" in p or "msedge" in p:
+        return "Edge"
+    return "Chrome"
+
+
+def in_container():
+    """容器里的判定：docker 会写 /.dockerenv，podman / k8s 用别的标记兜底。"""
+    if os.environ.get("WB_IN_CONTAINER") == "1":
+        return True
+    if os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv"):
+        return True
+    return False
+
+
 def find_browser():
+    # 显式指定优先：路径、命令名都行
+    for key in ("WB_CHROME_PATH", "CHROME_PATH", "CHROME_BIN"):
+        hint = (os.environ.get(key) or "").strip()
+        if not hint:
+            continue
+        if os.path.isfile(hint):
+            return hint, _brand_of(hint)
+        hit = shutil.which(hint)
+        if hit:
+            return hit, _brand_of(hit)
+
     cands = []
     envs = ["ProgramFiles(x86)", "ProgramFiles", "LOCALAPPDATA"]
     for env in envs:
@@ -103,17 +135,51 @@ def find_browser():
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
         "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        # Linux / 容器：Debian 的 chromium 包落在 /usr/bin/chromium
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/snap/bin/chromium",
     ]
     for p in cands:
         if p and os.path.isfile(p):
-            brand = "Edge" if "edge" in p.lower() else "Chrome"
-            return p, brand
-    for name in ("google-chrome", "chromium", "microsoft-edge"):
-        from shutil import which
-        hit = which(name)
+            return p, _brand_of(p)
+    for name in (
+        "chromium", "chromium-browser", "google-chrome",
+        "google-chrome-stable", "chrome", "microsoft-edge", "msedge",
+    ):
+        hit = shutil.which(name)
         if hit:
-            return hit, "Chrome"
+            return hit, _brand_of(hit)
     return None, None
+
+
+def launch_extra_flags():
+    """容器内 chromium 必须放开沙箱（容器默认 root 跑），并绕开过小的 /dev/shm。"""
+    flags = [a for a in (os.environ.get("WB_CHROME_ARGS") or "").split() if a]
+    if os.name != "nt":
+        flags.append("--disable-dev-shm-usage")
+        is_root = hasattr(os, "geteuid") and os.geteuid() == 0
+        if is_root or in_container():
+            flags += ["--no-sandbox", "--disable-setuid-sandbox"]
+    return flags
+
+
+def tail_log(path, limit=280):
+    """抓启动日志最后一行，失败时直接告诉用户为什么起不来，别只说「启动失败」。"""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - 8192))
+            text = f.read().decode("utf-8", "replace")
+    except Exception:
+        return ""
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    if not lines:
+        return ""
+    return "（%s）" % lines[-1][:limit]
 
 
 def free_port():
@@ -332,7 +398,19 @@ class BrowserLogin:
     def start(self, hint="", headless=True):
         exe, brand = find_browser()
         if not exe:
-            return {"ok": False, "error": "本机没找到 Chrome 或 Edge；容器部署请用令牌方式添加"}
+            return {"ok": False, "error": (
+                "没找到可用浏览器。桌面端装 Chrome/Edge 即可；"
+                "容器里请用带 chromium 的镜像（Dockerfile 已内置），"
+                "或用 WB_CHROME_PATH 指定浏览器路径"
+            )}
+        # 容器里没有 X/Wayland，开窗口模式只会静默卡住，直接说清楚
+        if not headless and in_container() and not (
+            os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+        ):
+            return {"ok": False, "error": (
+                "容器里没有图形界面，只能扫码登录（二维码会显示在控制台弹窗里）；"
+                "手机号 / 企业微信登录需要在桌面端运行"
+            )}
         sid = base64.urlsafe_b64encode(os.urandom(9)).decode().rstrip("=")
         s = Session(sid, hint)
         s.brand = brand
@@ -410,17 +488,25 @@ class BrowserLogin:
                 args += ["--headless=new", "--disable-gpu", "--hide-scrollbars", "--mute-audio"]
             else:
                 args += ["--window-position=120,60"]
+            args += launch_extra_flags()
             args.append(LOGIN_URL)
             flags = 0x08000000 if os.name == "nt" else 0
-            s.proc = subprocess.Popen(
-                args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                creationflags=flags,
-            )
+            errpath = os.path.join(profile, "chromium.log")
+            # 浏览器自己的报错留着，起不来时能直接看到原因
+            err = open(errpath, "wb")
+            try:
+                s.proc = subprocess.Popen(
+                    args, stdout=err, stderr=err,
+                    creationflags=flags,
+                )
+            finally:
+                err.close()
             ws_url = self._wait_target(port, s)
             if not ws_url:
                 if s.state != "cancelled":
                     s.state = "error"
-                    s.message = "浏览器启动失败，或调试端口没起来"
+                    s.message = ("浏览器启动失败或调试端口没起来"
+                                 + tail_log(errpath))
                 return
 
             rest = ws_url.split("://", 1)[1]

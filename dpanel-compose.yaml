@@ -13,7 +13,12 @@ services:
       # WB_SECRET: "随便一串 32 位以上字符"   # 填了才能把数据整体迁到别的机器
     volumes:
       - wb-data:/data
-    mem_limit: 256m
+    # 镜像里内置了 chromium，扫码时要几百 MB 内存。内存/存储紧张的话，
+    # 自建一个不带浏览器的镜像（docker build --build-arg WB_WITH_BROWSER=0），
+    # 再把这里调回 256m，只用粘贴凭据的方式添加账号
+    mem_limit: ${WB_MEM_LIMIT:-1g}
+    # chromium 依赖 /dev/shm，容器默认只有 64MB
+    shm_size: ${WB_SHM_SIZE:-256m}
     logging:
       driver: json-file
       options:

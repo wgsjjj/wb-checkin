@@ -6,7 +6,7 @@ import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
-VER = "1.2.0"
+VER = "1.3.0"
 
 EXE = DIST / "wb-checkin.exe"
 if not EXE.exists():
