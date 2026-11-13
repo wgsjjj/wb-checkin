@@ -1,6 +1,10 @@
 services:
   wb-checkin:
-    build: .
+    build:
+      context: .
+      args:
+        # 0 = 不装 chromium（镜像小，只能粘贴凭据）；1 = 内置浏览器，可扫码登录
+        WB_WITH_BROWSER: "${WB_WITH_BROWSER:-1}"
     image: wb-checkin:latest
     container_name: wb-checkin
     restart: unless-stopped
@@ -15,8 +19,11 @@ services:
       WB_DOMAIN: "www.workbuddy.cn"
     volumes:
       - ./data:/data
-    # 软路由内存有限，限制一下上限（compose v2 直接支持）
-    mem_limit: 256m
+    # 内置 chromium 之后内存占用上一个档：256m 会在扫码时被 OOM 干掉，
+    # 只粘贴凭据不用浏览器的话可以调回 256m
+    mem_limit: ${WB_MEM_LIMIT:-1g}
+    # chromium 默认吃 /dev/shm，容器里只有 64MB，页面一复杂就崩
+    shm_size: ${WB_SHM_SIZE:-256m}
     logging:
       driver: json-file
       options:

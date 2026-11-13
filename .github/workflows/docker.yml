@@ -100,6 +100,14 @@ jobs:
           echo -n "容器时间: "; docker exec wb date '+%Y-%m-%d %H:%M:%S %Z'
           echo -n "数据目录: "; docker exec wb ls -A /data | tr '\n' ' '; echo
 
+      # 镜像里必须真的能用浏览器，否则「官方登录」会报找不到 Chrome/Edge
+      - name: Assert browser usable
+        run: |
+          set -e
+          docker exec wb chromium --version
+          # 只做探测，不起浏览器：模块能找到 chromium 就算通过
+          docker exec wb python -c "from browser_login import find_browser as f; p,_=f(); print('found:', p); assert p, '镜像里找不到 chromium'"
+
       - name: Container logs
         if: always()
         run: docker logs wb | tail -30
