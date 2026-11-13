@@ -16,6 +16,24 @@
 
 ---
 
+
+## 0. 直接下载（不想装 Python）
+
+到 [Releases](https://github.com/wgsjjj/wb-checkin/releases/latest) 下载：
+
+| 文件 | 说明 |
+| --- | --- |
+| `wb-checkin-1.0.0-win64.zip` | **Windows 单文件 exe，解压双击就能用**，不用装 Python |
+| `wb-checkin-1.0.0-source.zip` | 源码包，装了 Python 3.9+ 的机器（Windows / macOS / Linux）用 |
+
+exe 版的数据存在它旁边的 `data/` 目录，整个文件夹拷走就能换机器继续用。
+不想要黑色命令行窗口？双击包里的 `静默启动.bat`，它只开服务不弹浏览器。
+
+> exe 是 PyInstaller 打的包，个别杀软会启发式误报，加信任即可；介意就用源码包，代码全在里面。
+
+---
+
+
 ## 1. 先搞清楚一件事：多账号的令牌从哪来
 
 WorkBuddy 桌面端会把登录态写在本地：
@@ -256,14 +274,37 @@ A：这是上游活动规则决定的，本工具只负责执行签到，不干�
 
 ```
 wb-checkin/
-├── app.py              后端（HTTP 服务 + 签到逻辑 + 定时调度 + 扫码会话）
-├── static/index.html   控制台页面
-├── static/m.html       手机端添加页
-├── static/qrcode.js    二维码生成（qrcode-generator, MIT，已本地化）
+├── app.py                    后端（HTTP 服务 + 签到逻辑 + 定时调度 + 扫码会话）
+├── static/index.html         控制台页面
+├── static/m.html             手机端添加页
+├── static/qrcode.js          二维码生成（qrcode-generator, MIT，已本地化）
 ├── Dockerfile
-├── docker-compose.yml
+├── docker-compose.yml        源码自建用
+├── dpanel-compose.yaml       DPanel 用（拉 GHCR 镜像）
 ├── requirements.txt
 ├── .env.example
-├── start.bat           Windows 一键启动
-└── data/               运行时生成：wb.db / .secret
+├── start.bat                 Windows 源码启动
+├── wb.ico / wb-version.txt   exe 图标与版本信息
+├── packaging/
+│   ├── make_icon.py          生成 wb.ico
+│   ├── pack_local.py         打 Windows 本地部署包
+│   └── 使用说明.txt           打包进 zip 的说明
+├── .github/workflows/        多架构镜像构建 + 冒烟测试
+└── data/                     运行时生成：wb.db / .secret
 ```
+
+---
+
+## 自己打包 exe
+
+```bash
+python -m pip install pyinstaller cryptography
+python -m PyInstaller --noconfirm --clean --onefile --console \
+  --name wb-checkin --icon wb.ico --version-file wb-version.txt \
+  --add-data "static;static" app.py
+python packaging/pack_local.py      # 生成 dist/*.zip
+```
+
+打包时**必须**装上 `cryptography`，否则 exe 里的令牌会退回 Windows DPAPI 加密——
+那样 `data/` 目录就不便携了，换台电脑解不开。
+

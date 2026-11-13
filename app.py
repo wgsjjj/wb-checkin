@@ -36,9 +36,16 @@ from urllib.parse import parse_qs, urlparse
 
 # ---------------------------------------------------------------- 基础配置
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# 打包成 exe 后：静态资源在 PyInstaller 的临时解压目录，数据要放 exe 旁边才便携
+if getattr(sys, "frozen", False):
+    BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))
+    RES_DIR = getattr(sys, "_MEIPASS", BASE_DIR)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    RES_DIR = BASE_DIR
+
 DATA_DIR = os.environ.get("WB_DATA_DIR") or os.path.join(BASE_DIR, "data")
-STATIC_DIR = os.path.join(BASE_DIR, "static")
+STATIC_DIR = os.path.join(RES_DIR, "static")
 DB_PATH = os.path.join(DATA_DIR, "wb.db")
 
 HOST = os.environ.get("WB_HOST", "127.0.0.1")

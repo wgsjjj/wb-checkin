@@ -9,6 +9,13 @@ __pycache__/
 .venv/
 venv/
 
+# 打包产物
+dist/
+build/
+*.spec
+*.exe
+packaging/_icon_preview.png
+
 # 本地临时文件
 *.log
 _c.js
