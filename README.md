@@ -78,49 +78,75 @@ WB_PORT=9000 python app.py
 
 ## 3. 部署到软路由（Docker）
 
-### 方式 A：软路由为 x86_64（N5105 / J4125 等）
+镜像已经由 GitHub Actions 预构建好并推到 GHCR，**软路由上不需要编译、不需要装 Rust、x86 和 ARM 都能直接拉**：
 
-把整个 `wb-checkin` 目录拷到软路由（scp、SMB 或 iStoreOS 的文件管理都行），然后：
+```
+ghcr.io/wgsjjj/wb-checkin:latest      # 多架构：linux/amd64 + linux/arm64
+```
+
+### 方式 A：DPanel 创建 Compose 应用（推荐）
+
+DPanel 面板 →「Compose」→「创建」，把下面这段整段粘进去即可（也存成了仓库里的 `dpanel-compose.yaml`）：
+
+```yaml
+services:
+  wb-checkin:
+    image: ghcr.io/wgsjjj/wb-checkin:latest
+    container_name: wb-checkin
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      TZ: Asia/Shanghai
+      # 改成你自己的访问密码，留空 = 同网段任何人可打开控制台
+      WB_PASSWORD: "change-me-123456"
+      WB_DOMAIN: "www.workbuddy.cn"
+    volumes:
+      - wb-data:/data
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+volumes:
+  wb-data:
+```
+
+创建时把 `WB_PASSWORD` 改成自己的密码，端口 8787 被占用就改左边的 `"18787:8787"`。数据存在 `wb-data` 命名卷里，删容器不丢。
+
+> 若拉取时报 `denied` / `unauthorized`：说明镜像包的可见性还是 Private。仓库已设为 Public，首次构建完成后镜像默认也是 Public；万一不是，去仓库右侧 **Packages** → 该包 → **Package settings** → Change visibility → Public。
+
+### 方式 B：软路由上命令行 compose
 
 ```bash
-cd /root/wb-checkin          # 换成就绪的实际路径
-cp .env.example .env         # 按需修改 WB_PASSWORD
-docker compose up -d --build
+mkdir -p /root/wb-checkin && cd /root/wb-checkin
+curl -fsSLO https://raw.githubusercontent.com/wgsjjj/wb-checkin/main/dpanel-compose.yaml
+mv dpanel-compose.yaml compose.yaml
+# 改一下 WB_PASSWORD
+vi compose.yaml
+docker compose up -d
 ```
 
 访问 `http://软路由IP:8787`。
 
-> 也可以用 `docker compose up -d`（不带 `--build`）的前提是已经有 `wb-checkin:latest` 镜像。
+### 方式 C：完全离线/自建镜像
 
-### 方式 B：软路由为 ARM64（N1 / R4S / 树莓派等）
-
-在 ARM 设备上直接 `--build` 时，`cryptography` 有可能要现场编译（需要 Rust 工具链，软路由上基本装不动）。推荐在电脑上交叉构建好再传过去：
+想自己构建（或改代码后自建）：
 
 ```bash
-# 在 x86 电脑上（已开启 buildx）
-docker buildx build --platform linux/arm64 -t wb-checkin:latest --load .
-docker save wb-checkin:latest -o wb-checkin-arm64.tar
-
-scp wb-checkin-arm64.tar root@192.168.1.1:/root/
+git clone https://github.com/wgsjjj/wb-checkin.git
+cd wb-checkin
+docker compose up -d --build        # docker-compose.yml 里是 build: .
 ```
 
-```bash
-# 在软路由上
-docker load -i wb-checkin-arm64.tar
-cd /root/wb-checkin && docker compose up -d
-```
+ARM 设备上不建议直接 `--build`——`cryptography` 可能现场编译 Rust，软路由扛不住。用预构建镜像即可。
 
-### 方式 C：不用 compose，直接 `docker run`
+### 更新到新版本
 
 ```bash
-docker run -d \
-  --name wb-checkin \
-  --restart unless-stopped \
-  -p 8787:8787 \
-  -e TZ=Asia/Shanghai \
-  -e WB_PASSWORD=你的访问密码 \
-  -v /root/wb-checkin/data:/data \
-  wb-checkin:latest
+docker compose pull && docker compose up -d     # 或在 DPanel 里点「重新拉取镜像 + 重建」
 ```
 
 ### 部署后要检查的三件事
@@ -128,8 +154,8 @@ docker run -d \
 | 检查项 | 怎么确认 |
 | --- | --- |
 | 时区对不对 | 页面底部「服务时间」应等于北京时间，否则定时会偏 8 小时 |
-| 端口通不通 | `docker logs wb-checkin` 看到 `控制台: http://...:8787` |
-| 数据持不持久 | `/root/wb-checkin/data` 里应有 `wb.db` 和 `.secret`，重建容器不丢 |
+| 密码生效没 | 打开页面应先要求输入访问密码（环境变量 `WB_PASSWORD` 为空则不校验） |
+| 数据持不持久 | 卷 `wb-data` 里应有 `wb.db` 和 `.secret`，重建容器不丢 |
 
 ---
 
