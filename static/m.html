@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#F5F6FA" />
+<title>添加账号 · WorkBuddy 签到助手</title>
+<style>
+  :root{
+    --bg:#F5F6FA; --surface:#fff; --line:#E7E9F2; --ink:#171A22;
+    --ink-2:#5C6479; --ink-3:#8D93A8; --brand:#5B5BF0; --ok:#0E9F6E; --err:#DD2C2C;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:var(--bg)}
+  body{
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    color:var(--ink);
+    padding:28px 18px calc(28px + env(safe-area-inset-bottom));
+    max-width:520px;margin:0 auto;
+  }
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:26px}
+  .logo{
+    width:38px;height:38px;border-radius:11px;flex:0 0 auto;
+    background:linear-gradient(140deg,#5B5BF0,#7A5AF8);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 6px 16px -6px rgba(91,91,240,.7);
+  }
+  .logo svg{width:22px;height:22px}
+  .brand b{font-size:15px;font-weight:600}
+  .brand i{display:block;font-size:11.5px;color:var(--ink-3);font-style:normal;font-weight:400}
+
+  h1{font-size:22px;margin:0 0 6px;letter-spacing:-.4px}
+  .sub{margin:0 0 24px;color:var(--ink-3);font-size:13.5px;line-height:1.6}
+
+  label{display:block;font-size:13px;color:var(--ink-2);font-weight:500;margin:0 0 7px}
+  .field{margin-bottom:18px}
+  input,textarea{
+    width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+    border-radius:12px;font-size:16px;padding:13px 14px;outline:none;
+    font-family:inherit;transition:border-color .15s,box-shadow .15s;
+  }
+  textarea{resize:vertical;min-height:118px;line-height:1.5;font-size:15px}
+  input:focus,textarea:focus{border-color:#B9B9F5;box-shadow:0 0 0 3px rgba(91,91,240,.12)}
+
+  .btn{
+    width:100%;height:50px;border-radius:13px;border:none;
+    font-size:16px;font-weight:600;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    transition:transform .08s,opacity .15s;
+  }
+  .btn:active{transform:scale(.988)}
+  .btn:disabled{opacity:.6}
+  .btn-primary{background:linear-gradient(135deg,#5B5BF0,#7A5AF8);color:#fff;box-shadow:0 10px 22px -12px rgba(91,91,240,.9)}
+  .btn-ghost{background:transparent;border:1px solid var(--line);color:var(--ink-2);font-size:14px;font-weight:500;height:44px;margin-bottom:14px}
+  .btn-ghost:active{background:#EDEEF6}
+
+  .note{
+    margin-top:22px;background:#fff;border:1px solid var(--line);border-radius:13px;
+    padding:14px 15px;font-size:12.5px;color:var(--ink-3);line-height:1.7;
+  }
+  .note b{color:var(--ink-2);font-weight:600}
+  .note code{background:#EDEEF7;color:#4A4AB8;padding:1px 5px;border-radius:4px;font-size:11.5px;overflow-wrap:break-word}
+
+  .done{display:none;text-align:center;padding:36px 0}
+  .done.show{display:block}
+  .tick{
+    width:76px;height:76px;border-radius:50%;background:#E9F7F1;color:#0E9F6E;
+    display:flex;align-items:center;justify-content:center;margin:0 auto 20px;
+    animation:pop .32s cubic-bezier(.2,1.4,.4,1);
+  }
+  @keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+  .done h2{font-size:20px;margin:0 0 8px}
+  .done p{margin:0;color:var(--ink-3);font-size:13.5px}
+
+  .err{
+    display:none;margin:0 0 16px;background:#FDECEC;border:1px solid #F6CFCF;
+    color:#B42323;border-radius:11px;padding:11px 13px;font-size:13px;line-height:1.55;
+  }
+  .err.show{display:block}
+
+  .toast{
+    position:fixed;left:50%;bottom:32px;transform:translateX(-50%);
+    background:#1E2230;color:#fff;font-size:13px;padding:11px 16px;border-radius:10px;
+    box-shadow:0 10px 26px -8px rgba(0,0,0,.45);opacity:0;transition:opacity .2s;
+    pointer-events:none;max-width:86vw;text-align:center;
+  }
+  .toast.show{opacity:1}
+  .spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div class="brand">
+  <div class="logo"><svg viewBox="0 0 64 64" fill="none"><path d="M18 40V24l7 10 7-10 7 10 7-10v16" stroke="#fff" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+  <div><b>WorkBuddy 签到助手</b><i>手机端添加</i></div>
+</div>
+
+<div id="form-wrap">
+  <h1>添加签到账号</h1>
+  <p class="sub">填好后这个账号会直接出现在电脑上的账号列表里，不用在电脑上操作。</p>
+
+  <div class="err" id="err"></div>
+
+  <form id="form" autocomplete="off">
+    <div class="field">
+      <label for="name">备注名称</label>
+      <input id="name" type="text" placeholder="例如：小号 A（可留空）" />
+    </div>
+    <div class="field">
+      <label for="token">令牌 token</label>
+      <textarea id="token" placeholder="粘贴 Bearer 后面那一串" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+    </div>
+    <button type="button" class="btn btn-ghost" id="pasteBtn">从剪贴板粘贴</button>
+    <button type="submit" class="btn btn-primary" id="submitBtn">添加账号</button>
+  </form>
+
+  <div class="note">
+    <b>令牌从哪来：</b>在电脑或手机浏览器登录 <code>www.workbuddy.cn</code>，按 F12 打开开发者工具 → Network → 找任意 <code>/v2/</code> 请求 → 复制 Request Headers 里 <code>Authorization</code> 中 <code>Bearer </code> 后面的字符串。
+  </div>
+</div>
+
+<div class="done" id="done">
+  <div class="tick"><svg width="38" height="38" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <h2>添加成功</h2>
+  <p id="doneText">账号已出现在电脑端，可以关闭这个页面了。</p>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const ticket = params.get('a') || '';
+
+function toast(msg, ms) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), ms || 2200);
+}
+
+function showErr(msg) {
+  $('err').textContent = msg;
+  $('err').classList.add('show');
+}
+
+if (!ticket) {
+  showErr('链接缺少凭证。请回到电脑上点击「扫码添加」，重新扫一次二维码。');
+  $('form').querySelectorAll('input,textarea,button').forEach(el => el.disabled = true);
+}
+
+$('pasteBtn').addEventListener('click', async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text) { toast('剪贴板是空的'); return; }
+    $('token').value = text.trim();
+    toast('已粘贴');
+  } catch (e) {
+    $('token').focus();
+    toast('浏览器不允许读取剪贴板，请长按输入框手动粘贴');
+  }
+});
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const token = $('token').value.trim();
+  if (token.length < 16) { showErr('令牌看起来不对，请检查是否粘全了。'); return; }
+
+  $('err').classList.remove('show');
+  const btn = $('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>正在校验…';
+
+  try {
+    const res = await fetch('/api/m/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ticket,
+        token,
+        name: $('name').value.trim(),
+        domain: 'www.workbuddy.cn'
+      })
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      $('form-wrap').style.display = 'none';
+      $('done').classList.add('show');
+      if (data.warn) $('doneText').textContent = '账号已添加：' + data.warn;
+      else $('doneText').textContent = '账号已出现在电脑端，可以关闭这个页面了。';
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    btn.disabled = false;
+    btn.textContent = '添加账号';
+    showErr(data.error || '添加失败，请重试');
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = '添加账号';
+    showErr('连不上电脑，请确认手机和电脑在同一个网络。');
+  }
+});
+
+$('token').addEventListener('input', () => $('err').classList.remove('show'));
+</script>
+</body>
+</html>

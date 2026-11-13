@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WorkBuddy 多账号签到助手</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%235B5BF0'/%3E%3Cpath d='M18 40V24l7 10 7-10 7 10 7-10v16' stroke='%23fff' stroke-width='5' fill='none' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E" />
+<style>
+  :root{
+    --bg:#F5F6FA;
+    --surface:#FFFFFF;
+    --line:#E7E9F2;
+    --line-2:#F0F1F7;
+    --ink:#171A22;
+    --ink-2:#5C6479;
+    --ink-3:#8D93A8;
+    --brand:#5B5BF0;
+    --brand-2:#7A5AF8;
+    --ok:#0E9F6E;
+    --ok-bg:#E9F7F1;
+    --warn:#C2760A;
+    --warn-bg:#FDF4E3;
+    --err:#DD2C2C;
+    --err-bg:#FDECEC;
+    --radius:16px;
+    --shadow:0 1px 2px rgba(23,26,34,.04), 0 10px 28px -16px rgba(23,26,34,.18);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  button{font-family:inherit}
+  input,textarea{font-family:inherit}
+
+  /* ---------- 顶栏 ---------- */
+  header{
+    position:sticky;top:0;z-index:30;
+    background:rgba(245,246,250,.86);
+    backdrop-filter:saturate(180%) blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  .bar{
+    max-width:1180px;margin:0 auto;padding:14px 24px;
+    display:flex;align-items:center;gap:14px;
+  }
+  .logo{
+    width:38px;height:38px;border-radius:11px;flex:0 0 auto;
+    background:linear-gradient(140deg,var(--brand),var(--brand-2));
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 6px 16px -6px rgba(91,91,240,.7);
+  }
+  .logo svg{width:22px;height:22px}
+  .titles{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .titles h1{margin:0;font-size:16px;font-weight:650;letter-spacing:-.2px}
+  .titles span{font-size:12px;color:var(--ink-3)}
+  .grow{flex:1}
+  .pill{
+    display:inline-flex;align-items:center;gap:6px;
+    height:30px;padding:0 11px;border-radius:999px;
+    background:var(--surface);border:1px solid var(--line);
+    font-size:12px;color:var(--ink-2);
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:#C6CAD8}
+  .dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(14,159,110,.12)}
+
+  /* ---------- 按钮 ---------- */
+  .btn{
+    height:36px;padding:0 15px;border-radius:10px;
+    border:1px solid var(--line);background:var(--surface);color:var(--ink);
+    font-size:13px;font-weight:500;cursor:pointer;
+    display:inline-flex;align-items:center;gap:7px;
+    transition:background .15s,border-color .15s,transform .08s;
+    white-space:nowrap;
+  }
+  .btn:hover{background:#FAFAFE;border-color:#D9DCEA}
+  .btn:active{transform:translateY(1px)}
+  .btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+  .btn-primary{
+    background:linear-gradient(135deg,var(--brand),var(--brand-2));
+    border:none;color:#fff;
+    box-shadow:0 8px 18px -10px rgba(91,91,240,.9);
+  }
+  .btn-primary:hover{background:linear-gradient(135deg,#5050E8,#6E4EF0)}
+  .btn-ghost{background:transparent;border-color:transparent;color:var(--ink-2)}
+  .btn-ghost:hover{background:#EDEEF6}
+  .btn-sm{height:30px;padding:0 11px;font-size:12px;border-radius:8px}
+  .btn-danger:hover{background:var(--err-bg);border-color:#F6CFCF;color:var(--err)}
+
+  /* ---------- 布局 ---------- */
+  main{max-width:1180px;margin:0 auto;padding:22px 24px 60px}
+
+  /* ---------- 统计 ---------- */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}
+  .stat{
+    background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    padding:14px 16px;display:flex;flex-direction:column;gap:2px;
+  }
+  .stat b{font-size:23px;font-weight:680;letter-spacing:-.5px;line-height:1.2}
+  .stat small{font-size:12px;color:var(--ink-3)}
+  .stat .sub{font-size:11px;color:var(--ink-3);margin-top:2px}
+
+  /* ---------- 区域头 ---------- */
+  .sec-head{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+  .sec-head h2{margin:0;font-size:14px;font-weight:620;letter-spacing:-.1px}
+  .sec-head .count{
+    font-size:11px;color:var(--ink-3);background:#EDEEF6;
+    padding:2px 7px;border-radius:6px;
+  }
+  .sec-head .grow{flex:1}
+
+  /* ---------- 账号卡片 ---------- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(316px,1fr));gap:12px}
+  .card{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:15px 16px 13px;position:relative;
+    transition:box-shadow .18s,border-color .18s,transform .18s;
+  }
+  .card:hover{box-shadow:var(--shadow);border-color:#DCDEEC;transform:translateY(-1px)}
+  .card.off{opacity:.62}
+  .card-top{display:flex;align-items:flex-start;gap:11px}
+  .avatar{
+    width:36px;height:36px;border-radius:10px;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;
+    font-size:15px;font-weight:650;color:#fff;
+    background:linear-gradient(140deg,#7C7CF7,#9B7BF9);
+  }
+  .who{min-width:0;flex:1}
+  .who .nm{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .who .meta{font-size:11.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .badge{
+    display:inline-flex;align-items:center;gap:4px;
+    font-size:11px;font-weight:500;padding:2px 8px;border-radius:6px;
+    background:#F0F1F7;color:var(--ink-2);white-space:nowrap;
+  }
+  .badge.ok{background:var(--ok-bg);color:var(--ok)}
+  .badge.err{background:var(--err-bg);color:var(--err)}
+  .badge.warn{background:var(--warn-bg);color:var(--warn)}
+
+  .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:13px 0 11px}
+  .metric{background:#FAFBFE;border-radius:9px;padding:7px 9px}
+  .metric b{display:block;font-size:15px;font-weight:640;letter-spacing:-.3px}
+  .metric small{font-size:10.5px;color:var(--ink-3)}
+
+  .msgline{
+    font-size:11.5px;color:var(--ink-3);min-height:16px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:10px;
+  }
+  .actions{display:flex;align-items:center;gap:6px;border-top:1px solid var(--line-2);padding-top:11px}
+  .actions .grow{flex:1}
+
+  /* 开关 */
+  .switch{position:relative;display:inline-block;width:34px;height:19px;flex:0 0 auto;margin-top:2px}
+  .switch input{opacity:0;width:0;height:0}
+  .slider{
+    position:absolute;inset:0;background:#D5D8E5;border-radius:999px;
+    cursor:pointer;transition:background .2s;
+  }
+  .slider:before{
+    content:"";position:absolute;width:15px;height:15px;left:2px;top:2px;
+    background:#fff;border-radius:50%;transition:transform .2s;
+    box-shadow:0 1px 3px rgba(0,0,0,.18);
+  }
+  .switch input:checked + .slider{background:var(--brand)}
+  .switch input:checked + .slider:before{transform:translateX(15px)}
+
+  /* ---------- 空状态 ---------- */
+  .empty{
+    background:var(--surface);border:1px dashed #D8DBE9;border-radius:var(--radius);
+    padding:44px 24px;text-align:center;
+  }
+  .empty h3{margin:0 0 6px;font-size:15px;font-weight:600}
+  .empty p{margin:0 0 18px;color:var(--ink-3);font-size:13px}
+
+  /* ---------- 底部两栏 ---------- */
+  .cols{display:grid;grid-template-columns:340px 1fr;gap:12px;margin-top:22px;align-items:start}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+  .panel h3{margin:0 0 3px;font-size:13.5px;font-weight:620}
+  .panel .hint{font-size:11.5px;color:var(--ink-3);margin:0 0 14px}
+
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:12px;color:var(--ink-2);margin-bottom:5px;font-weight:500}
+  .input{
+    width:100%;height:36px;padding:0 11px;border-radius:9px;
+    border:1px solid var(--line);background:#FCFCFE;color:var(--ink);
+    font-size:13px;outline:none;transition:border-color .15s,box-shadow .15s;
+  }
+  .input:focus{border-color:#B9B9F5;box-shadow:0 0 0 3px rgba(91,91,240,.1);background:#fff}
+  textarea.input{height:auto;padding:9px 11px;resize:vertical;min-height:78px;line-height:1.5}
+  .row{display:flex;gap:8px;align-items:center}
+
+  .times-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .tchip{
+    font-size:11.5px;padding:3px 8px;border-radius:6px;
+    background:#F0F1F7;color:var(--ink-2);
+  }
+  .tchip.next{background:#EDEEFE;color:var(--brand);font-weight:600}
+
+  /* ---------- 日志 ---------- */
+  .logs{max-height:340px;overflow:auto;margin:-4px -4px -4px 0;padding-right:4px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{
+    text-align:left;font-weight:500;color:var(--ink-3);font-size:11px;
+    padding:6px 8px;position:sticky;top:0;background:var(--surface);
+    border-bottom:1px solid var(--line);z-index:1;
+  }
+  td{padding:7px 8px;border-bottom:1px solid var(--line-2);color:var(--ink-2);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td.nm{color:var(--ink);font-weight:500;white-space:nowrap}
+  td.tm{color:var(--ink-3);white-space:nowrap;font-variant-numeric:tabular-nums}
+  td.msg{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tag{font-size:10.5px;padding:1px 6px;border-radius:5px;background:#F0F1F7;color:var(--ink-2);white-space:nowrap}
+  .tag.ok{background:var(--ok-bg);color:var(--ok)}
+  .tag.err{background:var(--err-bg);color:var(--err)}
+  .tag.warn{background:var(--warn-bg);color:var(--warn)}
+
+  /* ---------- 弹窗 ---------- */
+  .mask{
+    position:fixed;inset:0;background:rgba(20,22,32,.36);
+    backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;
+    z-index:60;padding:20px;
+  }
+  .mask.show{display:flex}
+  .modal{
+    background:var(--surface);border-radius:18px;width:min(520px,100%);
+    max-height:88vh;overflow:auto;
+    box-shadow:0 30px 70px -20px rgba(15,18,30,.45);
+    animation:pop .18s ease-out;
+  }
+  @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+  .modal header{
+    position:static;background:none;backdrop-filter:none;border:none;
+    padding:18px 20px 0;display:flex;align-items:center;
+  }
+  .modal header h3{margin:0;font-size:15px;font-weight:640}
+  .modal .body{padding:16px 20px 4px}
+  .modal .foot{
+    padding:14px 20px 18px;display:flex;gap:8px;justify-content:flex-end;
+    border-top:1px solid var(--line-2);margin-top:8px;
+  }
+  .note{
+    font-size:11.5px;color:var(--ink-3);background:#F8F9FD;border:1px solid var(--line-2);
+    border-radius:9px;padding:10px 12px;line-height:1.6;margin-top:4px;
+  }
+  .note b{color:var(--ink-2);font-weight:600}
+  .note code{
+    background:#EDEEF7;color:#4A4AB8;padding:1px 4px;border-radius:4px;
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;
+    overflow-wrap:break-word;
+  }
+
+  /* 扫码 */
+  .tabs{display:flex;gap:2px;background:#F0F1F7;border-radius:9px;padding:3px;margin-left:auto}
+  .tab{
+    border:none;background:transparent;color:var(--ink-2);
+    font-size:12px;font-weight:500;padding:5px 11px;border-radius:7px;cursor:pointer;
+    transition:background .15s,color .15s;white-space:nowrap;
+  }
+  .tab.active{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(23,26,34,.1)}
+  .qrbox{
+    border:1px solid var(--line);border-radius:14px;background:#FCFCFE;
+    padding:18px;text-align:center;margin-bottom:14px;
+  }
+  #qrimg{display:flex;align-items:center;justify-content:center;min-height:200px}
+  #qrimg svg{width:200px;height:200px;display:block;border-radius:4px}
+  .qrdone{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    height:200px;color:var(--ok);font-size:14px;font-weight:600;
+  }
+  .qrdone .big{
+    width:52px;height:52px;border-radius:50%;background:var(--ok-bg);
+    display:flex;align-items:center;justify-content:center;font-size:24px;
+  }
+  .qrhint{font-size:11.5px;color:var(--ink-3);margin-top:12px;line-height:1.6}
+  .qrhint b{color:var(--brand);font-weight:600}
+  .qrhint .left{display:block;margin-top:6px;font-size:11px;font-variant-numeric:tabular-nums}
+
+  /* ---------- Toast ---------- */
+  #toasts{position:fixed;top:16px;right:16px;z-index:80;display:flex;flex-direction:column;gap:8px}
+  .toast{
+    background:#1E2230;color:#fff;font-size:12.5px;padding:10px 14px;border-radius:10px;
+    box-shadow:0 12px 30px -10px rgba(0,0,0,.5);max-width:360px;
+    animation:slide .2s ease-out;
+  }
+  .toast.ok{background:#0E9F6E}
+  .toast.err{background:#D62C2C}
+  @keyframes slide{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+
+  /* ---------- 登录 ---------- */
+  #login{
+    position:fixed;inset:0;background:var(--bg);z-index:100;
+    display:none;align-items:center;justify-content:center;padding:24px;
+  }
+  #login.show{display:flex}
+  .login-box{width:min(360px,100%);text-align:center}
+  .login-box .logo{margin:0 auto 16px;width:46px;height:46px;border-radius:14px}
+  .login-box h2{margin:0 0 6px;font-size:17px}
+  .login-box p{margin:0 0 20px;color:var(--ink-3);font-size:12.5px}
+  .login-box .input{text-align:center;height:40px}
+
+  .spin{
+    width:13px;height:13px;border:2px solid rgba(255,255,255,.35);
+    border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;
+  }
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  footer{
+    max-width:1180px;margin:0 auto;padding:0 24px 40px;
+    font-size:11.5px;color:var(--ink-3);
+    display:flex;flex-wrap:wrap;gap:14px;
+  }
+  footer span{display:inline-flex;align-items:center;gap:5px}
+
+  @media (max-width:860px){
+    .cols{grid-template-columns:1fr}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    main{padding:16px 14px 50px}
+    .bar{padding:12px 14px}
+    footer{padding:0 14px 30px}
+  }
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="login-box">
+    <div class="logo"><svg viewBox="0 0 64 64" fill="none"><path d="M18 40V24l7 10 7-10 7 10 7-10v16" stroke="#fff" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+    <h2>WorkBuddy 签到助手</h2>
+    <p>请输入访问密码</p>
+    <input id="pw" class="input" type="password" placeholder="访问密码" autocomplete="current-password" />
+    <div style="height:10px"></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;height:40px" onclick="login()">进入控制台</button>
+  </div>
+</div>
+
+<header>
+  <div class="bar">
+    <div class="logo"><svg viewBox="0 0 64 64" fill="none"><path d="M18 40V24l7 10 7-10 7 10 7-10v16" stroke="#fff" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+    <div class="titles">
+      <h1>WorkBuddy 签到助手</h1>
+      <span id="subline">多账号 · 自动签到 · 积分汇总</span>
+    </div>
+    <div class="grow"></div>
+    <div class="pill"><i class="dot" id="statusDot"></i><span id="statusText">连接中</span></div>
+    <button class="btn" onclick="openAdd()">添加账号</button>
+    <button class="btn btn-primary" id="runAllBtn" onclick="runAll()">
+      <span>全部签到</span>
+    </button>
+  </div>
+</header>
+
+<main>
+  <section class="stats">
+    <div class="stat"><b id="sTotal">0</b><small>账号总数</small><div class="sub" id="sEnabled">0 个启用</div></div>
+    <div class="stat"><b id="sDone">0</b><small>今日已签到</small><div class="sub" id="sRate">完成率 —</div></div>
+    <div class="stat"><b id="sCredit">0</b><small>积分合计</small><div class="sub">所有账号余额之和</div></div>
+    <div class="stat"><b id="sStreak">0</b><small>最长连续</small><div class="sub" id="sInvalid">无异常账号</div></div>
+  </section>
+
+  <div class="sec-head">
+    <h2>账号</h2>
+    <span class="count" id="accCount">0</span>
+    <div class="grow"></div>
+    <button class="btn btn-ghost btn-sm" onclick="refresh(true)">刷新状态</button>
+  </div>
+
+  <div id="accounts" class="grid"></div>
+
+  <div class="cols">
+    <section class="panel">
+      <h3>定时签到</h3>
+      <p class="hint">每天在这些时间点自动跑一轮，已签到会自动跳过。</p>
+
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+        <div>
+          <div style="font-size:13px;font-weight:500">自动签到</div>
+          <div style="font-size:11.5px;color:var(--ink-3)" id="autoState">已开启</div>
+        </div>
+        <label class="switch"><input type="checkbox" id="autoToggle" onchange="toggleAuto(this.checked)"><span class="slider"></span></label>
+      </div>
+
+      <div class="field">
+        <label>时间点（逗号分隔）</label>
+        <input id="timesInput" class="input" placeholder="08:30,12:00,15:00,18:00,21:30" />
+      </div>
+      <button class="btn btn-sm" onclick="saveTimes()">保存时间</button>
+
+      <div class="times-list" id="timesList"></div>
+      <div style="font-size:11.5px;color:var(--ink-3);margin-top:12px" id="nextRun"></div>
+    </section>
+
+    <section class="panel">
+      <h3>签到记录</h3>
+      <p class="hint">最近 60 条执行结果</p>
+      <div class="logs" id="logs"></div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <span id="fNow"></span>
+  <span id="fTz"></span>
+  <span id="fCrypto"></span>
+  <span id="fVersion"></span>
+</footer>
+
+<!-- 添加 / 编辑 -->
+<div class="mask" id="modal">
+  <div class="modal">
+    <header>
+      <h3 id="modalTitle">添加账号</h3>
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-tab="form" onclick="switchTab('form')">手动填写</button>
+        <button class="tab" data-tab="qr" onclick="switchTab('qr')">手机扫码</button>
+      </div>
+    </header>
+    <div class="body">
+      <div id="paneForm">
+      <div class="field">
+        <label>备注名称</label>
+        <input id="fName" class="input" placeholder="例如：主号 / 小号 A" />
+      </div>
+      <div class="field">
+        <label>令牌（token）</label>
+        <textarea id="fToken" class="input" placeholder="粘贴 Bearer 后面的字符串，或直接粘贴整段登录态 JSON"></textarea>
+        <div class="note" id="tokenNote">
+          <b>怎么拿 token：</b>浏览器登录 <code>www.workbuddy.cn</code> → F12 打开开发者工具 → Network 面板 → 随便点一个页面操作，找到任意 <code>/v2/</code> 开头的请求 → 在 Request Headers 里复制 <code>Authorization</code> 中 <code>Bearer </code> 后面的部分。
+        </div>
+      </div>
+      <div class="row" style="gap:10px">
+        <div class="field" style="flex:1;margin-bottom:8px">
+          <label>接口域名</label>
+          <input id="fDomain" class="input" value="www.workbuddy.cn" />
+        </div>
+        <div class="field" style="flex:1;margin-bottom:8px">
+          <label>User ID（可选）</label>
+          <input id="fUid" class="input" placeholder="uid / uin" />
+        </div>
+      </div>
+      </div>
+
+      <div id="paneQr" style="display:none">
+        <div class="qrbox">
+          <div id="qrimg"></div>
+          <div class="qrhint" id="qrhint">用手机扫码，在手机上粘贴 token 完成添加</div>
+        </div>
+        <div class="field" id="ipRow" style="display:none;margin-bottom:8px">
+          <label>手机访问地址</label>
+          <select id="ipSelect" class="input" onchange="renderQr()"></select>
+        </div>
+        <div class="note">
+          二维码 10 分钟内有效，且只能提交一次。手机需要和这台设备在同一个局域网内；软路由部署时用软路由的局域网 IP 访问控制台，二维码会自动用这个地址。
+        </div>
+      </div>
+    </div>
+    <div class="foot">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" id="saveBtn" onclick="saveAccount()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script src="/qrcode.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let STATE = { data: null, busy: false, editing: null, needLogin: false };
+const STATE_LABEL = {
+  success: ['签到成功', 'ok'],
+  already: ['已签到', 'ok'],
+  status: ['状态正常', 'ok'],
+  invalid: ['令牌失效', 'err'],
+  error: ['失败', 'err']
+};
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function toast(msg, type) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (type || '');
+  el.textContent = msg;
+  $('toasts').appendChild(el);
+  setTimeout(() => {
+    el.style.transition = 'opacity .25s, transform .25s';
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(10px)';
+    setTimeout(() => el.remove(), 260);
+  }, 3400);
+}
+
+async function api(path, opts) {
+  const res = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts || {}));
+  let data = null;
+  try { data = await res.json(); } catch (e) { data = {}; }
+  if (res.status === 401 && data.error === 'unauthorized') {
+    STATE.needLogin = true;
+    $('login').classList.add('show');
+    throw new Error('unauthorized');
+  }
+  return data;
+}
+
+async function boot() {
+  try {
+    const me = await api('/api/me');
+    STATE.needLogin = me.needLogin;
+    if (me.needLogin && !me.authed) {
+      $('login').classList.add('show');
+      $('pw').focus();
+      $('statusText').textContent = '待登录';
+      return;
+    }
+    $('login').classList.remove('show');
+    await refresh();
+    setInterval(() => { if (!document.hidden) refresh(); }, 5000);
+  } catch (e) { /* ignore */ }
+}
+
+async function login() {
+  const pwd = $('pw').value;
+  if (!pwd) return;
+  const r = await api('/api/login', { method: 'POST', body: JSON.stringify({ password: pwd }) });
+  if (r.ok) {
+    $('login').classList.remove('show');
+    boot();
+  } else {
+    toast(r.error || '密码不正确', 'err');
+    $('pw').select();
+  }
+}
+$('pw') && $('pw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+async function refresh(probe) {
+  try {
+    const d = await api('/api/overview');
+    if (d && d.accounts) {
+      STATE.data = d;
+      render();
+      $('statusDot').classList.add('on');
+      $('statusText').textContent = '运行中';
+    }
+  } catch (e) {
+    $('statusDot').classList.remove('on');
+    $('statusText').textContent = '连接失败';
+  }
+  if (probe) await probeAll();
+}
+
+async function probeAll() {
+  if (!STATE.data) return;
+  const ids = STATE.data.accounts.filter(a => a.enabled).map(a => a.id);
+  for (const id of ids) {
+    try { await api('/api/accounts/' + id + '/test', { method: 'POST', body: '{}' }); } catch (e) {}
+  }
+  const d = await api('/api/overview');
+  if (d && d.accounts) { STATE.data = d; render(); }
+}
+
+function badgeFor(a) {
+  if (a.token_state === 'invalid') return '<span class="badge err">令牌失效</span>';
+  if (a.today) return '<span class="badge ok">今日已签</span>';
+  if (a.token_state === 'error') return '<span class="badge warn">异常</span>';
+  if (!a.enabled) return '<span class="badge">已停用</span>';
+  return '<span class="badge">待签到</span>';
+}
+
+function render() {
+  const d = STATE.data;
+  if (!d) return;
+  const s = d.stats;
+
+  $('sTotal').textContent = s.total;
+  $('sEnabled').textContent = s.enabled + ' 个启用';
+  $('sDone').textContent = s.done;
+  $('sRate').textContent = s.total ? Math.round(s.done / s.total * 100) + '% 完成率' : '完成率 —';
+  $('sCredit').textContent = s.credit.toLocaleString('zh-CN');
+  $('sStreak').textContent = s.streak;
+  $('sInvalid').textContent = s.invalid ? (s.invalid + ' 个令牌失效') : '无异常账号';
+  $('accCount').textContent = s.total;
+
+  // 账号
+  const box = $('accounts');
+  if (!d.accounts.length) {
+    box.className = '';
+    box.innerHTML = `
+      <div class="empty">
+        <h3>还没有添加账号</h3>
+        <p>添加多个 WorkBuddy 账号的令牌，就能一键批量签到并自动定时执行。</p>
+        <button class="btn btn-primary" onclick="openAdd()">添加第一个账号</button>
+      </div>`;
+  } else {
+    box.className = 'grid';
+    box.innerHTML = d.accounts.map(a => {
+      const initial = (a.name || '?').trim().charAt(0).toUpperCase();
+      const meta = [a.user_id ? 'UID ' + a.user_id : '', a.domain || ''].filter(Boolean).join(' · ') || '未填写 UID';
+      const msg = a.last_msg ? a.last_msg : (a.last_ts ? '上次执行 ' + a.last_ts.slice(5, 16) : '尚未执行');
+      return `
+      <div class="card ${a.enabled ? '' : 'off'}">
+        <div class="card-top">
+          <div class="avatar">${esc(initial)}</div>
+          <div class="who">
+            <div class="nm" title="${esc(a.name)}">${esc(a.name)}</div>
+            <div class="meta">${esc(meta)}</div>
+          </div>
+          <label class="switch" title="启用/停用">
+            <input type="checkbox" ${a.enabled ? 'checked' : ''} onchange="toggleAccount(${a.id}, this.checked)">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="metrics">
+          <div class="metric"><b>${a.today ? '已签' : '未签'}</b><small>今日</small></div>
+          <div class="metric"><b>${a.streak}<span style="font-size:11px;font-weight:400;color:var(--ink-3)"> 天</span></b><small>连续</small></div>
+          <div class="metric"><b>${Number(a.credit).toLocaleString('zh-CN')}</b><small>积分</small></div>
+        </div>
+        <div class="msgline">${badgeFor(a)} <span style="margin-left:4px">${esc(msg)}</span></div>
+        <div class="actions">
+          <button class="btn btn-primary btn-sm" onclick="runOne(${a.id}, this)">签到</button>
+          <button class="btn btn-sm" onclick="testOne(${a.id}, this)">测活</button>
+          <div class="grow"></div>
+          <button class="btn btn-ghost btn-sm" onclick="openEdit(${a.id})">编辑</button>
+          <button class="btn btn-ghost btn-sm btn-danger" onclick="removeAccount(${a.id}, '${esc(a.name).replace(/'/g, "\\'")}')">删除</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // 定时
+  $('autoToggle').checked = d.settings.auto;
+  $('autoState').textContent = d.settings.auto ? '已开启' : '已关闭';
+  if (document.activeElement !== $('timesInput')) $('timesInput').value = d.settings.times;
+
+  const times = d.settings.times.split(',').filter(Boolean);
+  const nowHM = new Date().toTimeString().slice(0, 5);
+  const next = times.find(t => t > nowHM) || times[0];
+  $('timesList').innerHTML = times.map(t =>
+    `<span class="tchip ${t === next ? 'next' : ''}">${t}</span>`
+  ).join('');
+  $('nextRun').textContent = d.settings.auto
+    ? (next ? `下一轮：${next}${times.indexOf(next) === 0 && next <= nowHM ? '（明天）' : ''}` : '未设置时间')
+    : '自动签到已关闭';
+
+  // 日志
+  const logs = d.logs || [];
+  $('logs').innerHTML = logs.length ? `
+    <table>
+      <thead><tr><th>时间</th><th>账号</th><th>结果</th><th>积分</th><th>说明</th></tr></thead>
+      <tbody>${logs.map(l => {
+        const [label, cls] = STATE_LABEL[l.state] || [l.state || '—', ''];
+        return `<tr>
+          <td class="tm">${esc((l.ts || '').slice(5, 16))}</td>
+          <td class="nm">${esc(l.name)}</td>
+          <td><span class="tag ${cls}">${esc(label)}</span></td>
+          <td>${l.credit ? '+' + l.credit : '—'}</td>
+          <td class="msg" title="${esc(l.message)}">${esc(l.message || '')}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>` : '<div style="color:var(--ink-3);font-size:12.5px;padding:14px 4px">还没有执行记录</div>';
+
+  // 页脚
+  $('fNow').textContent = '服务时间 ' + d.server.now;
+  $('fTz').textContent = '时区 ' + (d.server.tz || '');
+  $('fCrypto').textContent = '令牌加密 ' + d.server.crypto;
+  $('fVersion').textContent = 'v' + d.server.version;
+}
+
+// ---------- 账号操作 ----------
+
+async function runAll() {
+  if (STATE.busy) return;
+  const btn = $('runAllBtn');
+  STATE.busy = true;
+  btn.disabled = true;
+  const old = btn.innerHTML;
+  btn.innerHTML = '<span class="spin"></span><span>执行中</span>';
+  try {
+    const r = await api('/api/checkin', { method: 'POST', body: '{}' });
+    if (r.busy) toast('上一轮还在执行', 'err');
+    else {
+      toast(r.summary || '执行完成', 'ok');
+      const fails = (r.results || []).filter(x => !x.ok);
+      fails.slice(0, 2).forEach(f => toast((f.name || '账号') + '：' + (f.message || '失败'), 'err'));
+    }
+  } catch (e) {
+    toast('执行失败', 'err');
+  } finally {
+    STATE.busy = false;
+    btn.disabled = false;
+    btn.innerHTML = old;
+    refresh();
+  }
+}
+
+async function runOne(id, btn) {
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = '…';
+  try {
+    const r = await api('/api/accounts/' + id + '/checkin', { method: 'POST', body: '{}' });
+    const x = (r.results || [])[0] || {};
+    toast((x.name || '账号') + '：' + (x.message || '完成'), x.ok ? 'ok' : 'err');
+  } catch (e) {
+    toast('执行失败', 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
+    refresh();
+  }
+}
+
+async function testOne(id, btn) {
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = '…';
+  try {
+    const r = await api('/api/accounts/' + id + '/test', { method: 'POST', body: '{}' });
+    toast(r.ok ? ('连通正常' + (r.status && r.status.today ? '，今日已签到' : '，今日未签到')) : ('测活失败：' + ((r.status && r.status.message) || '未知错误')), r.ok ? 'ok' : 'err');
+  } catch (e) {
+    toast('测活失败', 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
+    refresh();
+  }
+}
+
+async function toggleAccount(id, on) {
+  await api('/api/accounts/' + id, { method: 'PUT', body: JSON.stringify({ enabled: on }) });
+  refresh();
+}
+
+async function removeAccount(id, name) {
+  if (!confirm('确定删除账号「' + name + '」？该操作不可撤销。')) return;
+  await api('/api/accounts/' + id, { method: 'DELETE' });
+  toast('已删除', 'ok');
+  refresh();
+}
+
+// ---------- 扫码添加 ----------
+const QR = { ticket: null, timer: null, tick: null, deadline: 0 };
+let NET_IPS = [];
+
+function isLoopback() {
+  return /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+}
+
+function qrBase() {
+  if (isLoopback()) {
+    const sel = $('ipSelect');
+    const ip = (sel && sel.value) || NET_IPS[0];
+    if (ip) return 'http://' + ip + ':' + (location.port || '80');
+  }
+  return location.origin;
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  $('paneForm').style.display = tab === 'form' ? '' : 'none';
+  $('paneQr').style.display = tab === 'qr' ? '' : 'none';
+  const sb = $('saveBtn');
+  if (sb) sb.style.display = tab === 'form' ? '' : 'none';
+  if (tab === 'qr') startQr(); else stopQr();
+}
+
+async function startQr() {
+  stopQr();
+  $('qrimg').innerHTML = '<div style="color:var(--ink-3);font-size:12px">正在生成…</div>';
+  $('qrhint').textContent = '用手机扫码，在手机上粘贴 token 完成添加';
+
+  let net = { ips: [] };
+  try { net = await api('/api/net'); } catch (e) {}
+  NET_IPS = net.ips || [];
+  if (isLoopback() && NET_IPS.length) {
+    $('ipRow').style.display = '';
+    const cur = $('ipSelect').value;
+    $('ipSelect').innerHTML = NET_IPS.map(ip => '<option value="' + esc(ip) + '">' + esc(ip) + '</option>').join('');
+    if (cur && NET_IPS.indexOf(cur) >= 0) $('ipSelect').value = cur;
+  } else {
+    $('ipRow').style.display = 'none';
+  }
+
+  const r = await api('/api/qr/new');
+  if (!r || !r.ticket) {
+    $('qrimg').innerHTML = '<div style="color:var(--err);font-size:12px">生成失败，请重试</div>';
+    return;
+  }
+  QR.ticket = r.ticket;
+  QR.deadline = Date.now() + (r.ttl || 600) * 1000;
+  renderQr();
+  QR.timer = setInterval(pollQr, 2000);
+  QR.tick = setInterval(updateQrHint, 1000);
+  updateQrHint();
+}
+
+function renderQr() {
+  if (!QR.ticket) return;
+  const url = qrBase() + '/m?a=' + encodeURIComponent(QR.ticket);
+  try {
+    const qr = qrcode(0, 'M');
+    qr.addData(url);
+    qr.make();
+    $('qrimg').innerHTML = qr.createSvgTag({ cellSize: 5, margin: 2, scalable: true });
+  } catch (e) {
+    $('qrimg').innerHTML = '<div style="font-size:11px;color:var(--ink-3);word-break:break-all">' + esc(url) + '</div>';
+  }
+}
+
+function updateQrHint() {
+  if (!QR.ticket) return;
+  const left = Math.max(0, Math.floor((QR.deadline - Date.now()) / 1000));
+  const m = Math.floor(left / 60);
+  const s = left % 60;
+  if (left <= 0) {
+    $('qrhint').innerHTML = '二维码已过期，切换到「手动填写」再切回来可重新生成';
+    return;
+  }
+  $('qrhint').innerHTML = '用手机扫码，在手机上粘贴 token 完成添加<span class="left">二维码剩余 <b>' + m + ':' + (s < 10 ? '0' + s : s) + '</b></span>';
+}
+
+async function pollQr() {
+  if (!QR.ticket) return;
+  try {
+    const st = await api('/api/qr/status?t=' + encodeURIComponent(QR.ticket));
+    if (st.state === 'done') {
+      const nm = st.account && st.account.name;
+      stopQr();
+      $('qrimg').innerHTML = '<div class="qrdone"><div class="big">✓</div><div>已添加</div></div>';
+      $('qrhint').textContent = nm ? ('账号「' + nm + '」已加入列表') : '账号已加入列表';
+      toast('已通过手机添加账号', 'ok');
+      refresh();
+      setTimeout(closeModal, 1500);
+    } else if (st.state === 'expired') {
+      stopQr();
+      $('qrhint').innerHTML = '二维码已过期，切换到「手动填写」再切回来可重新生成';
+    }
+  } catch (e) { /* 瞬时网络错误忽略，下一轮再试 */ }
+}
+
+function stopQr() {
+  if (QR.timer) clearInterval(QR.timer);
+  if (QR.tick) clearInterval(QR.tick);
+  QR.timer = null;
+  QR.tick = null;
+  QR.ticket = null;
+}
+
+// ---------- 弹窗 ----------
+
+function openAdd() {
+  STATE.editing = null;
+  $('modalTitle').textContent = '添加账号';
+  $('fName').value = '';
+  $('fToken').value = '';
+  $('fDomain').value = 'www.workbuddy.cn';
+  $('fUid').value = '';
+  $('fToken').placeholder = '粘贴 Bearer 后面的字符串，或直接粘贴整段登录态 JSON';
+  $('tokenNote').style.display = '';
+  $('tabs').style.display = '';
+  $('modal').classList.add('show');
+  switchTab('form');
+  setTimeout(() => $('fName').focus(), 50);
+}
+
+function openEdit(id) {
+  const a = (STATE.data.accounts || []).find(x => x.id === id);
+  if (!a) return;
+  STATE.editing = id;
+  $('modalTitle').textContent = '编辑账号';
+  $('fName').value = a.name;
+  $('fToken').value = '';
+  $('fToken').placeholder = '留空表示不修改令牌';
+  $('fDomain').value = a.domain || 'www.workbuddy.cn';
+  $('fUid').value = a.user_id || '';
+  $('tokenNote').style.display = 'none';
+  $('tabs').style.display = 'none';
+  $('modal').classList.add('show');
+  switchTab('form');
+}
+
+function closeModal() {
+  stopQr();
+  $('modal').classList.remove('show');
+}
+
+async function saveAccount() {
+  const btn = $('saveBtn');
+  const payload = {
+    name: $('fName').value.trim(),
+    token: $('fToken').value.trim(),
+    domain: $('fDomain').value.trim() || 'www.workbuddy.cn',
+    user_id: $('fUid').value.trim()
+  };
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = STATE.editing ? '保存中…' : '校验中…';
+  try {
+    let r;
+    if (STATE.editing) {
+      if (!payload.token) delete payload.token;
+      r = await api('/api/accounts/' + STATE.editing, { method: 'PUT', body: JSON.stringify(payload) });
+    } else {
+      if (!payload.token) { toast('请填写令牌', 'err'); return; }
+      r = await api('/api/accounts', { method: 'POST', body: JSON.stringify(payload) });
+    }
+    if (r.ok) {
+      closeModal();
+      toast(r.warn ? ('已保存（' + r.warn + '）') : '已保存', r.warn && !r.status ? 'err' : 'ok');
+      refresh();
+    } else {
+      toast(r.error || '保存失败', 'err');
+    }
+  } catch (e) {
+    toast('保存失败', 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
+  }
+}
+
+$('modal').addEventListener('click', e => { if (e.target === $('modal')) closeModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// ---------- 定时设置 ----------
+
+async function toggleAuto(on) {
+  await api('/api/settings', { method: 'POST', body: JSON.stringify({ auto: on }) });
+  toast(on ? '已开启自动签到' : '已关闭自动签到', 'ok');
+  refresh();
+}
+
+async function saveTimes() {
+  const v = $('timesInput').value.trim();
+  const r = await api('/api/settings', { method: 'POST', body: JSON.stringify({ times: v }) });
+  if (r.ok) { toast('时间已保存', 'ok'); refresh(); }
+  else toast(r.error || '保存失败', 'err');
+}
+
+boot();
+</script>
+</body>
+</html>

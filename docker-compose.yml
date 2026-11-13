@@ -1,0 +1,24 @@
+services:
+  wb-checkin:
+    build: .
+    image: wb-checkin:latest
+    container_name: wb-checkin
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      TZ: Asia/Shanghai
+      # 留空则局域网内任何人可访问，建议在软路由上设置一个访问密码
+      WB_PASSWORD: "${WB_PASSWORD:-}"
+      # 留空则自动生成并持久化到 /data/.secret；填写后令牌可跨设备迁移
+      WB_SECRET: "${WB_SECRET:-}"
+      WB_DOMAIN: "www.workbuddy.cn"
+    volumes:
+      - ./data:/data
+    # 软路由内存有限，限制一下上限（compose v2 直接支持）
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"

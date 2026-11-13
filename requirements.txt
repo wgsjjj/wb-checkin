@@ -1,0 +1,2 @@
+# 只需要加密库；其余全部是 Python 标准库
+cryptography>=42.0.0

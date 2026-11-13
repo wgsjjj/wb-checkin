@@ -1,0 +1,24 @@
+services:
+  wb-checkin:
+    image: ghcr.io/wgsjjj/wb-checkin:latest
+    container_name: wb-checkin
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      TZ: Asia/Shanghai
+      # 改成你自己的访问密码，留空 = 同网段任何人可打开控制台
+      WB_PASSWORD: "change-me-123456"
+      WB_DOMAIN: "www.workbuddy.cn"
+      # WB_SECRET: "随便一串 32 位以上字符"   # 填了才能把数据整体迁到别的机器
+    volumes:
+      - wb-data:/data
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+volumes:
+  wb-data:
