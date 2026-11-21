@@ -19,6 +19,10 @@
 
 ## 更新记录
 
+**1.3.1** · 2026-11-21
+- **修复扫码登录后账号名变成「账号 11212126」这种数字**：1.2.0 改成从用户菜单读昵称后，只在登录成功那一瞬间读一次；页面还没渲染完，读到的永远是空值，于是回落到「账号 + 月日时分」。现在改成轮询等待（最多约 12 秒），并且补了头像 `alt` 作为兜底选择器
+- 兜底名格式调整为 `账号 11-21 21:26`，八位纯数字确实难认
+
 **1.3.0** · 2026-11-13
 - **Docker 镜像内置 chromium，容器里也能扫码登录**：之前容器没有浏览器，「官方登录」直接报「本机没找到 Chrome 或 Edge」；现在镜像默认装好 chromium，二维码照常显示在控制台弹窗里
 - 容器内自动补 `--no-sandbox` / `--disable-dev-shm-usage`（容器默认 root、`/dev/shm` 只有 64MB，不加这两个参数 chromium 起不来或一加载就崩）
@@ -208,23 +212,119 @@ docker compose up -d
 
 访问 `http://软路由IP:8787`。
 
-### 方式 C：完全离线/自建镜像
+### 方式 C：拉不动镜像时，直接在宿主机构建（国内网络推荐）
 
-想自己构建（或改代码后自建）：
+先判断是不是「拉不动」：
+
+| 报错 | 含义 |
+|---|---|
+| `unexpected EOF`、进度到 100% 后又 `Retrying` 从 0 开始 | 大层（chromium 那层约 289MB）传输末尾被掐断，校验失败整层重下 |
+| `TLS handshake timeout`、`i/o timeout`、`connection reset` | 连不上 ghcr.io |
+| `no space left on device` | 磁盘不够，先把空间腾出来再看 |
+
+换国内镜像站（`ghcr.nju.edu.cn`、`ghcr.dockerproxy.net`、`ghcr.1ms.run`）能缓解，但不一定解决——**很多线路对长时间大流量传输不稳定，换个源仍然卡在同一层**。这种情况下最省事的办法是让宿主机自己装 chromium，因为软件源都在国内，速度能到几 MB/s。
+
+#### C-1. 把源码放到宿主机
+
+宿主机能连 GitHub 就直接 clone：
 
 ```bash
 git clone https://github.com/wgsjjj/wb-checkin.git
 cd wb-checkin
-docker compose up -d --build        # docker-compose.yml 里是 build: .
 ```
 
-ARM 设备上不建议直接 `--build`——`cryptography` 可能现场编译 Rust，软路由扛不住。用预构建镜像即可。
+连不上就在自己的电脑上打包再传（`192.168.100.1` 换成你的设备地址）：
+
+```bash
+# 在电脑上，仓库目录里执行
+tar -czf wb-src.tgz --exclude=.git --exclude=data .
+scp wb-src.tgz root@192.168.100.1:/tmp/
+
+# 在宿主机上
+mkdir -p /root/wb-checkin-src && tar -xzf /tmp/wb-src.tgz -C /root/wb-checkin-src
+cd /root/wb-checkin-src
+```
+
+只传源码就够，**不需要传镜像**，几百 KB 而已。
+
+#### C-2. 构建
+
+仓库里带了 `Dockerfile.cn`，apt 与 pip 全部走阿里云 https 源，直接可用：
+
+```bash
+docker build -f Dockerfile.cn -t wb-checkin:latest .
+```
+
+软路由上大约 10~20 分钟（x86 实测），时间主要花在下载和安装 chromium 的九十多个依赖包。构建末尾会自动跑 `chromium --version`，**能打印版本号才算成功**。
+
+> 想换源：`--build-arg APT_MIRROR=mirrors.tuna.tsinghua.edu.cn`（清华）或 `mirrors.ustc.edu.cn`（中科大）。
+> 存储紧张、不需要扫码登录：加 `--build-arg WB_WITH_BROWSER=0`，镜像能小 400MB 以上，但「官方登录」就用不了，只能粘贴凭据。
+> 用官方 `Dockerfile` 构建时要自己把 apt 源换成国内 https 源，否则 apt 会慢到像卡死——**必须是 https**，不少线路把 80 端口限速到二三十 KB/s。
+> 依赖只有一个 `cryptography`，aarch64 有预编译 wheel，软路由上直接装即可；如果日志里出现 `Building wheel for cryptography` 并开始调 cargo/rustc，说明在本地编译，会慢很多（可用 `APT_MIRROR` 换更快的源，或改用预构建镜像）。
+
+#### C-3. 用本地镜像启动
+
+关键：compose 里的 `image` 必须写成**本地标签**，不能留 `ghcr.io/...`，否则 `up -d` 会去仓库拉取，直接失败。
+
+```yaml
+services:
+  wb-checkin:
+    image: wb-checkin:latest      # 构建出来的本地镜像，不是 ghcr
+    container_name: wb-checkin
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      TZ: Asia/Shanghai
+      WB_PASSWORD: "换成你自己的密码"
+      WB_DOMAIN: "www.workbuddy.cn"
+    volumes:
+      - wb-data:/data
+    mem_limit: 1g                 # 扫码时内存峰值几百 MB，256m 会被 OOM
+    shm_size: 256m                # chromium 依赖 /dev/shm，默认只有 64MB
+
+volumes:
+  wb-data:
+```
+
+```bash
+docker compose up -d
+docker exec wb-checkin chromium --version     # 有版本号说明浏览器装好了
+```
+
+#### C-4. 以后再升级
+
+本地构建的镜像不会自己变新，改了代码或拉不到新版本时：
+
+```bash
+cd /root/wb-checkin-src
+# 更新源码：git pull，或者重新 scp 覆盖 app.py / browser_login.py / static/
+docker build -f Dockerfile.cn -t wb-checkin:latest .
+docker compose up -d --force-recreate
+```
+
+`--force-recreate` 不能省：标签名没变（都是 `latest`），不加这个参数 compose 可能认为容器无需重建，还在跑旧镜像。
+
+验证装进去的确实是新版本：
+
+```bash
+curl -s http://127.0.0.1:8787/api/me      # version 字段
+```
 
 ### 更新到新版本
+
+**用官方镜像的**：
 
 ```bash
 docker compose pull && docker compose up -d     # 或在 DPanel 里点「重新拉取镜像 + 重建」
 ```
+
+两个容易踩的点：
+
+- `docker compose up -d` **不会自己去仓库检查更新**。本地已有 `:latest` 标签时它直接拿本地那份启动，配置改了、容器也重建了，代码还是旧的。`docker compose pull` 要单独执行。
+- 想省事可以在 compose 里加 `pull_policy: always`，但网络不通时 `up -d` 会直接失败而不是退回本地镜像，软路由上不建议默认打开。
+
+**本地构建的**：见上面 C-4。
 
 ### 部署后要检查的三件事
 
@@ -354,6 +454,12 @@ A：先看状态那行字。正常流程是「正在加载二维码…」→「�
 **Q：容器起来了但页面打不开？**
 A：先看 `docker logs wb-checkin`；再确认软路由防火墙/端口映射；用 `curl -I http://127.0.0.1:8787` 在软路由本机上试。
 
+**Q：更新了镜像，页面上的版本号还是旧的？**
+A：两种原因。① 用官方镜像：`docker compose up -d` **不会去仓库检查更新**，本地已有 `:latest` 就直接拿本地的启动，必须单独执行 `docker compose pull`；② 本地构建：标签名没变（都叫 `latest`），要 `docker compose up -d --force-recreate`，不加这个参数容器不重建。确认办法：`curl -s http://127.0.0.1:8787/api/me` 看 `version` 字段。
+
+**Q：扫码加进来的账号名是「账号 11212126」这种八位数字？**
+A：1.3.0 及更早版本的问题。那是「账号 + 月日时分」的兜底名——扫码成功后页面刚跳转，左下角用户菜单还没渲染出来，昵称读了个空就回落了。1.3.1 起改成轮询等待昵称出现（最多约 12 秒），新加的账号会直接用页面上的昵称。已经加好的账号改名即可：卡片右下角「编辑」，或 `PUT /api/accounts/<id>` 带 `{"name":"新名字"}`。
+
 **Q：手机扫码打开是空白 / 打不开？**
 A：三种可能是：① 控制台是用 `127.0.0.1` 打开的，二维码里的地址手机访问不到——改用软路由/电脑的局域网 IP 打开控制台，或在扫码弹窗里手动选一个 IP；② 手机不在同一个局域网；③ 软路由防火墙拦了 8787 端口。
 
@@ -378,6 +484,7 @@ wb-checkin/
 ├── static/m.html             手机端添加页
 ├── static/qrcode.js          二维码生成（qrcode-generator, MIT，已本地化）
 ├── Dockerfile
+├── Dockerfile.cn              国内网络构建版（apt/pip 走阿里云 https 源）
 ├── docker-compose.yml        源码自建用
 ├── dpanel-compose.yaml       DPanel 用（拉 GHCR 镜像）
 ├── requirements.txt

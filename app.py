@@ -57,7 +57,7 @@ NO_BROWSER = os.environ.get("WB_NO_BROWSER") == "1"
 DEFAULT_DOMAIN = os.environ.get("WB_DOMAIN", "www.workbuddy.cn")
 DEFAULT_TIMES = "08:30,12:00,15:00,18:00,21:30"
 
-API_VERSION = "1.3.0"
+API_VERSION = "1.3.1"
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) WorkBuddy/5.9.3 Chrome/136.0.0.0 Electron/36.0.0 Safari/537.36"
@@ -780,7 +780,7 @@ def create_account(payload):
             uid = uid or parsed["user_id"]
             domain = domain if payload.get("domain") else parsed["domain"]
     if not name:
-        name = uid or ("账号 " + datetime.now().strftime("%m%d%H%M"))
+        name = uid or ("账号 " + datetime.now().strftime("%m-%d %H:%M"))
     if len(token) < 16:
         return {"ok": False, "error": "请填写有效的 token"}
 
