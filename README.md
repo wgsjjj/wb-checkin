@@ -247,6 +247,27 @@ cd /root/wb-checkin-src
 
 只传源码就够，**不需要传镜像**，几百 KB 而已。
 
+#### C-1b. 另一种做法：本机构建后传镜像
+
+如果你的电脑装了 Docker（Windows / macOS 的 Docker Desktop 也算），也可以在本机构建再传过去，宿主机就不用装编译依赖了：
+
+```bash
+# 本机，仓库目录里执行
+docker build -f Dockerfile.cn -t wb-checkin:latest .
+docker save wb-checkin:latest | gzip > wb-checkin.tar.gz
+
+scp wb-checkin.tar.gz root@192.168.100.1:/tmp/
+
+# 宿主机
+docker load -i /tmp/wb-checkin.tar.gz
+docker images | grep wb-checkin
+```
+
+两个前提：
+
+- **架构必须一致**。本机和宿主机都是 x86_64 才能直接传。ARM 设备（N1、部分群晖、树莓派）要在本机加 `--platform linux/arm64` 构建，会走 QEMU 模拟，慢好几倍；这种情况不如直接在宿主机上构建。
+- **压缩后仍有三四百 MB**。网络只比 ghcr 好一点的话，传源码（几百 KB）让宿主机自己装更快，也更不容易在传输末尾断掉。
+
 #### C-2. 构建
 
 仓库里带了 `Dockerfile.cn`，apt 与 pip 全部走阿里云 https 源，直接可用：
