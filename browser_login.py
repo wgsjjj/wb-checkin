@@ -87,9 +87,16 @@ NICK_JS = r"""
     const t = (el.textContent || '').trim();
     return (t && t.length <= 24) ? t : '';
   };
+  const alt = (el) => {
+    if (!el) return '';
+    const t = (el.getAttribute('alt') || el.getAttribute('title') || '').trim();
+    return (t && t.length <= 24) ? t : '';
+  };
   return pick(document.querySelector('[class*="user-menu-trigger-name"]'))
       || pick(document.querySelector('[class*="user-menu-trigger"] [class*="name"]'))
-      || pick(document.querySelector('[class*="nickname"]'));
+      || pick(document.querySelector('[class*="nickname"]'))
+      || alt(document.querySelector('[class*="user-menu"] img[class*="avatar"]'))
+      || alt(document.querySelector('[class*="avatar"] img'));
 })()
 """
 
@@ -676,10 +683,7 @@ class BrowserLogin:
                             if cred not in candidates:
                                 candidates.append(cred)
                             if not nick:
-                                try:
-                                    nick = (cdp.eval(NICK_JS, timeout=4) or "").strip()[:24]
-                                except Exception:
-                                    pass
+                                nick = self._read_nick(cdp)
                     except Exception:
                         pass
 
@@ -738,6 +742,25 @@ class BrowserLogin:
         if s.state == "waiting":
             s.state = "error"
             s.message = "登录超时（5 分钟），已关闭浏览器"
+
+    @staticmethod
+    def _read_nick(cdp, tries=15, gap=0.8):
+        """扫码成功后页面才刚跳转，用户菜单要等一会儿才渲染出来。
+
+        原来只挑一次，无头模式下几乎必然拿到空值，账号就只能叫「账号 11212126」。
+        这里轮询等待，拿到非空名字就返回；容器里 16MB 的 JS 加载慢，给到约 12 秒。
+        """
+        for i in range(tries):
+            try:
+                v = (cdp.eval(NICK_JS, timeout=4) or "").strip()
+            except Exception:
+                v = ""
+            # 登录页残留的按钮文字、长度异常的值都不算昵称
+            if v and v not in ("登录", "登录/注册", "注册", "WorkBuddy"):
+                return v[:24]
+            if i < tries - 1:
+                time.sleep(gap)
+        return ""
 
     @staticmethod
     def _guess_uid(store):

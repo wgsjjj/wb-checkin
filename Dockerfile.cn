@@ -1,0 +1,77 @@
+# syntax=docker/dockerfile:1
+#
+# 国内网络专用构建版 —— 与 Dockerfile 的唯一区别：apt 与 pip 全部走阿里云源。
+#
+# 什么时候用这个文件：
+#   1. ghcr.io 拉不动（大层报 unexpected EOF / TLS handshake timeout）
+#   2. 想改代码后自己构建，但服务器在国内网络
+#
+# 用法：
+#   docker build -f Dockerfile.cn -t wb-checkin:latest .
+#
+# 关键点：必须用 https，不能是 http。很多线路对 80 端口限速到 20~30 KB/s，
+# 同一个地址 http 只有几十 KB/s、https 有几 MB/s，走 http 会让 apt 像卡死一样。
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    TZ=Asia/Shanghai \
+    WB_HOST=0.0.0.0 \
+    WB_PORT=8787 \
+    WB_DATA_DIR=/data \
+    WB_NO_BROWSER=1
+
+# 1 = 镜像内置 chromium，容器里也能跑「官方登录」扫码（镜像大约多 400~500MB）
+# 0 = 不装浏览器，只能粘贴凭据添加账号（镜像小，适合存储紧张的软路由）
+ARG WB_WITH_BROWSER=1
+# 换源：清华用 mirrors.tuna.tsinghua.edu.cn，中科大用 mirrors.ustc.edu.cn
+ARG APT_MIRROR=mirrors.aliyun.com
+ARG PIP_MIRROR=https://mirrors.aliyun.com/pypi/simple/
+
+WORKDIR /app
+
+# 把 Debian 源换成国内镜像，并强制 https。
+# Debian 12 用 deb822 格式的 debian.sources，老版本用 sources.list，两种都处理。
+RUN set -eux; \
+    for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; do \
+        [ -f "$f" ] || continue; \
+        sed -i \
+            -e "s|http://deb.debian.org|https://${APT_MIRROR}|g" \
+            -e "s|http://security.debian.org|https://${APT_MIRROR}|g" \
+            -e "s|http://${APT_MIRROR}|https://${APT_MIRROR}|g" \
+            "$f"; \
+    done; \
+    grep -rhiE "^(URIs|deb )" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null || true
+
+# tzdata 必须装，否则容器内是 UTC，定时签到会整体偏移 8 小时。
+# chromium 装完立刻跑一次 --version：能启动才算构建成功，避免运行时才发现缺库。
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends tzdata; \
+    if [ "$WB_WITH_BROWSER" = "1" ]; then \
+        apt-get install -y --no-install-recommends chromium fonts-wqy-zenhei; \
+        ln -sf /usr/bin/chromium /usr/local/bin/chromium; \
+        chromium --version; \
+        rm -rf /root/.cache; \
+    fi; \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime; \
+    echo $TZ > /etc/timezone; \
+    rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -i ${PIP_MIRROR} \
+        --trusted-host "$(echo ${PIP_MIRROR} | sed -E 's#https?://([^/]+).*#\1#')" \
+        -r requirements.txt
+
+COPY app.py ./
+COPY browser_login.py ./
+COPY static ./static
+
+RUN mkdir -p /data
+VOLUME ["/data"]
+EXPOSE 8787
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8787/api/me',timeout=3)" || exit 1
+
+CMD ["python", "app.py"]
