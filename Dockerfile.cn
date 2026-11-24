@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 #
 # 国内网络专用构建版 —— 与 Dockerfile 的唯一区别：apt 与 pip 全部走阿里云源。
 #
@@ -11,6 +10,10 @@
 #
 # 关键点：必须用 https，不能是 http。很多线路对 80 端口限速到 20~30 KB/s，
 # 同一个地址 http 只有几十 KB/s、https 有几 MB/s，走 http 会让 apt 像卡死一样。
+#
+# 这里故意不写 `# syntax=docker/dockerfile:1`：那行会让 BuildKit 先去 docker.io
+# 拉 frontend 镜像，等于又引入一次外网依赖；本文件没用到任何 BuildKit 专属语法，
+# 去掉之后构建只依赖本地已有的 python:3.12-slim。
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \

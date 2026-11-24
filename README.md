@@ -280,6 +280,15 @@ docker images | grep wb-checkin
 docker build -f Dockerfile.cn -t wb-checkin:latest .
 ```
 
+这条命令**全程不需要访问 GitHub**：源码是你自己传上去的；基础镜像
+`python:3.12-slim`（约 119MB）一般本地早有缓存；apt / pip 走阿里云。
+
+唯一可能偷偷外连的是文件开头的 `# syntax=docker/dockerfile:1`——BuildKit 会先去
+docker.io 拉 frontend 镜像。`Dockerfile.cn` 里已经把这行去掉了（本文件没用到任何
+BuildKit 专属语法），所以构建是纯本地的。如果宿主机连 `python:3.12-slim` 都没有，
+用国内镜像源拉一次即可：`docker pull docker.1ms.run/library/python:3.12-slim`，
+再 `docker tag` 成 `python:3.12-slim`。
+
 软路由上大约 10~20 分钟（x86 实测），时间主要花在下载和安装 chromium 的九十多个依赖包。构建末尾会自动跑 `chromium --version`，**能打印版本号才算成功**。
 
 > 想换源：`--build-arg APT_MIRROR=mirrors.tuna.tsinghua.edu.cn`（清华）或 `mirrors.ustc.edu.cn`（中科大）。
