@@ -528,9 +528,16 @@ wb-checkin/
 python -m pip install pyinstaller cryptography
 python -m PyInstaller --noconfirm --clean --onefile --console \
   --name wb-checkin --icon wb.ico --version-file wb-version.txt \
-  --add-data "static;static" app.py
+  --add-data "static;static" --hidden-import browser_login app.py
 python packaging/pack_local.py      # 生成 dist/*.zip
 ```
+
+产物：`dist/wb-checkin.exe` 单文件，约 14 MB；`pack_local.py` 会把它连
+`使用说明.txt`、`静默启动.bat` 一起压成 `wb-checkin-<版本>-win64.zip`，
+另出一份含 `browser_login.py` 的源码包。
+
+`--hidden-import browser_login` 不能省：这个模块是在函数里延迟导入的，
+显式声明可以保证扫码登录一定进包。
 
 打包时**必须**装上 `cryptography`，否则 exe 里的令牌会退回 Windows DPAPI 加密——
 那样 `data/` 目录就不便携了，换台电脑解不开。

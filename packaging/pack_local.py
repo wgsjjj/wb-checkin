@@ -67,7 +67,7 @@ if src_pkg.exists():
     shutil.rmtree(src_pkg)
 src_pkg.mkdir(parents=True)
 
-for name in ("app.py", "requirements.txt", "start.bat", "README.md", ".env.example", "wb.ico"):
+for name in ("app.py", "browser_login.py", "requirements.txt", "start.bat", "README.md", ".env.example", "wb.ico"):
     s = ROOT / name
     if s.exists():
         shutil.copy2(s, src_pkg / name)
